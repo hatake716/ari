@@ -27,7 +27,7 @@ class Nest(
     var size: Int = 1,
 ) {
     fun room(id: Int) = chambers.first { it.id == id }
-    val capacity get() = chambers.filter { it.id != 0 }.sumOf { it.radius * it.radius * 17000 * it.built }.toInt().coerceAtLeast(1)
+    val capacity get() = chambers.filter { it.id != 0 }.sumOf { it.radius * it.radius * 17000 * NestGrowth.chamberProgress(it) }.toInt().coerceAtLeast(1)
     fun blocks(a: Int, b: Int) = obstacles.filter { (it.a == a && it.b == b) || (it.a == b && it.b == a) }
     fun localSpeed(a: Int, b: Int, t: Double, enemy: Boolean): Double {
         var speed = 1.0
@@ -46,7 +46,7 @@ class Nest(
         if (start == end) return listOf(start)
         val distance = chambers.associate { it.id to Double.POSITIVE_INFINITY }.toMutableMap()
         val previous = mutableMapOf<Int, Int>()
-        val open = chambers.filter { it.built >= .95 || it.id == end }.map { it.id }.toMutableSet()
+        val open = chambers.filter { it.built >= 1 || it.id == end || it.id == start }.map { it.id }.toMutableSet()
         distance[start] = 0.0
         while (open.isNotEmpty()) {
             val current = open.minBy { distance[it] ?: Double.POSITIVE_INFINITY }
@@ -66,15 +66,21 @@ class Nest(
         return result.reversed()
     }
     fun travelCost(route: List<Int>, enemy: Boolean = false) = route.zipWithNext().sumOf { (a, b) -> cost(a, b, enemy) }
+    private var efficiencyKey = ""
+    private var efficiencyValue = 1.0
     val efficiency: Double get() {
+        val key=chambers.joinToString { "${it.id}:${it.x}:${it.y}:${it.built>=1}" }+tunnels+obstacles
+        if(key==efficiencyKey)return efficiencyValue
+        efficiencyKey=key
         // Only barriers on real transport routes affect productivity; a side-branch stone is not a global debuff.
-        val inhabited = chambers.filter { it.id != 0 && it.built >= .95 }
+        val inhabited = chambers.filter { it.id != 0 && it.built >= 1 }
         val ratios = inhabited.map { room ->
             val route = path(0, room.id)
             val direct = route.zipWithNext().sumOf { (a, b) -> this.room(a).point.distance(this.room(b).point) }
             if (direct == 0.0) .1 else direct / travelCost(route).coerceAtLeast(.001)
         }
-        return ratios.average().takeIf { it.isFinite() }?.coerceIn(.1, 1.0) ?: .1
+        efficiencyValue=ratios.average().takeIf { it.isFinite() }?.coerceIn(.1, 1.0) ?: .1
+        return efficiencyValue
     }
     fun addRoom(point: Point): Boolean {
         if (chambers.size >= 20 || point.y !in .26.. .89 || point.x !in .10.. .90) return false
@@ -286,24 +292,21 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
         adults.removeAll { it.count == 0 }
     }
     private fun expand(dt: Double) {
-        nest.chambers.filter { it.built < 1 }.forEach { it.built = (it.built + dt * builders * .0015 * activity * nest.efficiency).coerceAtMost(1.0) }
-        if (population < nest.capacity * .65 || builders < 1) return
-        excavation += dt * builders * .025 * activity * nest.efficiency
-        // Widen lived-in rooms before adding new galleries. Obstacles remain physical objects.
-        if (excavation >= 8) {
-            excavation -= 8
-            val grow = nest.chambers.filter { it.id != 0 && it.radius < .085 }.minByOrNull { it.radius }
-            if (grow != null) grow.radius += .004
-            else if (nest.chambers.size < 20) {
-                repeat(35) {
-                    val point = Point(.12 + random() * .76, .30 + random() * .57)
-                    if (nest.addRoom(point)) {
-                        nest.chambers.last().built = .15
-                        record("働きアリが土粒を運び出し、新しい部屋を掘り始めました。")
-                        return
-                    }
-                }
-            }
+        if(builders<1)return
+        val jobs=nest.construction
+        val labor=builders*activity*nest.efficiency
+        jobs.forEach { room ->
+            room.built=(room.built+dt*min(.12,labor*.0075/jobs.size)).coerceAtMost(1.0)
+            if(room.built>=1)record("${nest.roomName(room)}が完成。巣は${nest.completedRooms}室になりました。新しい空間へ群れが広がります。")
+        }
+        val target=NestGrowth.demand(workers,population)
+        val parallel=when {workers>=1200->3;workers>=400->2;else->1}
+        if(nest.chambers.size-1>=target || nest.construction.size>=parallel)return
+        excavation=(excavation+dt*labor*.025).coerceAtMost(2.0)
+        if(excavation>=1.5) {
+            val room=NestGrowth.plan(nest) ?: return
+            excavation-=1.5
+            record("働きアリが新しい${nest.roomName(room)}へ通路を掘り始めました。群れ ${population}匹、完成した部屋 ${nest.completedRooms}室。")
         }
     }
     fun spawnRaid(kind: EnemyKind? = null, strength: Double = 1.0) {

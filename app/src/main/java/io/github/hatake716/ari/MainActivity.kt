@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private var status: TextView?=null
     private var phaseTitle: TextView?=null
     private var progressText: TextView?=null
+    private var growthText: TextView?=null
     private var dateLabel: TextView?=null
     private var metrics: List<TextView> = emptyList()
     private var pauseButton: Button?=null
@@ -126,7 +127,7 @@ class MainActivity : ComponentActivity() {
         parent.addView(view,LinearLayout.LayoutParams(0,dp(height),1f).apply {setMargins(dp(margin),0,dp(margin),0)})
     }
     private fun base(): LinearLayout {
-        root.removeAllViews();scene=null;status=null;dateLabel=null;phaseTitle=null;progressText=null;metrics=emptyList();speedButtons.clear();lastHudKey=""
+        root.removeAllViews();scene=null;status=null;dateLabel=null;phaseTitle=null;progressText=null;growthText=null;metrics=emptyList();speedButtons.clear();lastHudKey=""
         return vertical().also { root.addView(it,FrameLayout.LayoutParams(-1,-1)) }
     }
     private fun toolbar(title: String,subtitle: String,onBack: ()->Unit): LinearLayout = row().apply {
@@ -285,6 +286,11 @@ class MainActivity : ComponentActivity() {
         }
         add(layout,metricRow)
         val view=NestView(this).apply {colony=c;onInspect={title,body->info(title,body)}}
+        val growth=row().apply {setPadding(dp(20),0,dp(16),dp(6))}
+        growthText=text("",11f,accent)
+        growth.addView(growthText,LinearLayout.LayoutParams(0,-2,1f))
+        growth.addView(button("全体"){view.resetCamera()},LinearLayout.LayoutParams(dp(62),dp(36)))
+        add(layout,growth)
         scene=view;layout.addView(view,LinearLayout.LayoutParams(-1,0,1f))
         val bottom=vertical().apply {setPadding(dp(18),dp(13),dp(18),dp(12));setBackgroundColor(ink)}
         phaseTitle=text("",17f,accent,true);add(bottom,phaseTitle!!);gap(bottom,6)
@@ -307,7 +313,7 @@ class MainActivity : ComponentActivity() {
     private fun updateHud() {
         if(page!="game")return
         val c=colony?:return
-        val hudKey="${c.day.toInt()}:${c.temperature.toInt()}:${c.workers}:${c.brood.sumOf{it.count}}:${c.food.toInt()}:${c.queenHealth.toInt()}:${c.phase}:${c.speed}:${c.invader?.kind}:${c.journal.lastOrNull()?.text}:${c.nest.capacity}:$saveError"
+        val hudKey="${c.day.toInt()}:${c.temperature.toInt()}:${c.workers}:${c.brood.sumOf{it.count}}:${c.food.toInt()}:${c.queenHealth.toInt()}:${c.phase}:${c.speed}:${c.invader?.kind}:${c.journal.lastOrNull()?.text}:${c.nest.capacity}:${c.nest.construction.sumOf{(it.built*100).toInt()}}:$saveError"
         if(hudKey==lastHudKey)return
         lastHudKey=hudKey
         val date=SeasonCalendar.date(c.day)
@@ -315,6 +321,9 @@ class MainActivity : ComponentActivity() {
         if(metrics.size==4) {
             metrics[0].text="${c.workers}";metrics[1].text="${c.brood.sumOf{it.count}}";metrics[2].text="${c.food.toInt()}";metrics[3].text="${c.queenHealth.toInt()}%"
         }
+        val digging=c.nest.construction
+        growthText?.text="巣 ${c.nest.completedRooms}室" + if(digging.isEmpty()) "  ·  群れ ${c.population}匹" else
+            "  + ${digging.size}室を掘削中 ${(digging.map{it.built}.average()*100).toInt()}%\n群れ ${c.population}匹  ·  掘削する働きアリ ${c.builders}匹"
         phaseTitle?.text=if(c.invader!=null && !c.terminal)"${c.invader!!.kind.label}が侵入中"else c.phase.label
         status?.text=when {
             saveError -> "保存に失敗しました。空き容量を確認してください。巣はメモリに保持しています。"
@@ -354,7 +363,7 @@ class MainActivity : ComponentActivity() {
             else "${c.journal.lastOrNull()?.text}\n\n${formatDay(c.day)} / 撃退 ${c.repelled}回\n\n入口から女王室までの距離、障害物と採餌のバランスで、群れの育ち方は変わります。記録を読み、新しい巣で観察を始められます。")
     }
     private fun showGuide() {
-        info("この小さな世界について", "【遊び方】\nはじめに巣の形・広さを選び、部屋を追加し、女王室を決めます。通路に小枝や小石を置くと、外敵と働きアリの両方の足が遅くなります。障害物は最大8個。開始後の巣はアリたちに任せます。\n\n【観察の操作】\n1倍は現実と同じ時間です。60倍、1時間/秒、1日/秒、7日/秒で早送りできます。女王の到着・外敵の襲来・子女王の旅立ちは最大1時間/秒に自動で減速します。Ⅱで一時停止。ピンチで最大6倍まで拡大、ドラッグで移動。部屋をタップすると詳しく観察できます。\n\n【季節と暦】\n5月1日に始まり、ゲーム内の月が変わると12種類の林床の背景が切り替わります。芽吹き、新緑、梅雨、紅葉、落ち葉、霜や雪を観察できます。暦はうるう年のない365日周期です。画面の年目は巣の創設から数えます。端末の実際の月ではなく、早送りした巣の時間に連動します。\n\n【3つの巣と留守の間】\n10秒ごととアプリを閉じるときに自動保存。再開時には現実に経過した時間（最大30日）が進みます。選んだ早送り倍率は留守中に掛かりません。一時停止した巣は留守中も止まります。保存枠は一覧で長押しすると削除できます。\n\n【生態のモデル】\n温帯のアリを参考にした、特定種を断定しないモデルです。女王は産卵し、働きアリは育児・採餌・掘削・防衛を行います。創設時の女王は体内の蓄えで子を育てます。卵18日→幼虫22日→蛹20日（温暖時の基準）で成虫へ。寒い季節には活動と発育が遅くなります。\n\n【次の世代へ】\n創設3年、または1年以上かつ収容目安の155%を超える過密で、80匹以上の働きアリと食料があれば子女王を育て始めます。子女王は基準80日で羽化し、12日以上の成熟期間と暖かな日を待って雄と旅立ちます。子女王の旅立ちでクリアです。\n\nここでの「女王の交代」は新しい巣への世代継承を指します。母女王を子女王が必ず置き換えるという生態ではありません。母女王は元の巣に残ります。\n\n【再現の範囲】\n卵の性・カースト分化、栄養、季節、侵入虫との戦いは簡略化しています。日数・寿命・成長率・過密による繁殖・襲撃周期・小枝と小石の効果はゲーム用の設定で、実測値ではありません。画面の働きアリは最大110匹の代表表示で、全個体数は上部の数字に表示します。歩行は観察しやすい速さで、発育の時間とは別に表示しています。\n\n【参考資料】\nArizona State University, Life Cycle of an Ant Colony\nhttps://askabiologist.asu.edu/ant-colony-life-cycle\n\nNational Park Service, Carpenter Ant\nhttps://www.nps.gov/articles/carpenter-ant.htm\n\nRoces & Núñez, 1989, Brood translocation and circadian variation of temperature preference in the ant Camponotus mus\nhttps://pubmed.ncbi.nlm.nih.gov/28312153/\n\n【音と絵】\n森の土の背景はこの作品のために生成したアートです。生物・巣・障害物は動的描画。アリはクロオオアリなどのオオアリ属の形態を参考に、6本の関節脚、腹柄、複眼、大顎、節のある腹部と触角、女王の2対の翅を描いています。歩行は左右交互の3本組を基本とし、障害物で移動が遅くなると歩調も遅くなります。種の完全な形態復元や実測歩行の再現ではありません。BGM「土の下の午後」は独自のシンセサイザーで制作した穏やかなアンビエント曲です。広告・課金・通信・収集する個人情報はありません。")
+        info("この小さな世界について", "【遊び方】\nはじめに巣の形・広さを選び、部屋を追加し、女王室を決めます。通路に小枝や小石を置くと、外敵と働きアリの両方の足が遅くなります。障害物は最大8個。開始後の巣はアリたちに任せます。\n\n【観察の操作】\n1倍は現実と同じ時間です。60倍、1時間/秒、1日/秒、7日/秒で早送りできます。女王の到着・外敵の襲来・子女王の旅立ちは最大1時間/秒に自動で減速します。Ⅱで一時停止。ピンチで全体表示から最大10倍まで拡大、ドラッグで移動。「全体」で巣の端まで見渡せます。部屋をタップすると詳しく観察できます。\n\n【季節と暦】\n5月1日に始まり、ゲーム内の月が変わると12種類の林床の背景が切り替わります。芽吹き、新緑、梅雨、紅葉、落ち葉、霜や雪を観察できます。暦はうるう年のない365日周期です。画面の年目は巣の創設から数えます。端末の実際の月ではなく、早送りした巣の時間に連動します。\n\n【3つの巣と留守の間】\n10秒ごととアプリを閉じるときに自動保存。再開時には現実に経過した時間（最大30日）が進みます。選んだ早送り倍率は留守中に掛かりません。一時停止した巣は留守中も止まります。保存枠は一覧で長押しすると削除できます。\n\n【生態のモデル】\n温帯のアリを参考にした、特定種を断定しないモデルです。女王は産卵し、働きアリは育児・採餌・掘削・防衛を行います。創設時の女王は体内の蓄えで子を育てます。卵18日→幼虫22日→蛹20日（温暖時の基準）で成虫へ。寒い季節には活動と発育が遅くなります。\n\n【群れと巣の成長】\n群れが増えると働きアリが新しい通路を掘り、その先を育児室・貯蔵室・休息室へ広げます。工事の進捗は断面と上部に表示されます。完成した部屋へ幼体・食料・働きアリが分散し、最大48室まで地中へ拡大します。冬や外敵への防衛中は掘削も遅くなります。部屋の配置と用途は観察用の簡略モデルです。\n\n【次の世代へ】\n創設3年、または1年以上かつ収容目安の155%を超える過密で、80匹以上の働きアリと食料があれば子女王を育て始めます。子女王は基準80日で羽化し、12日以上の成熟期間と暖かな日を待って雄と旅立ちます。子女王の旅立ちでクリアです。\n\nここでの「女王の交代」は新しい巣への世代継承を指します。母女王を子女王が必ず置き換えるという生態ではありません。母女王は元の巣に残ります。\n\n【再現の範囲】\n卵の性・カースト分化、栄養、季節、侵入虫との戦いは簡略化しています。日数・寿命・成長率・過密による繁殖・襲撃周期・小枝と小石の効果はゲーム用の設定で、実測値ではありません。画面の働きアリは最大240匹の代表表示で、全個体数は上部の数字に表示します。歩行は観察しやすい速さで、発育の時間とは別に表示しています。\n\n【参考資料】\nArizona State University, Life Cycle of an Ant Colony\nhttps://askabiologist.asu.edu/ant-colony-life-cycle\n\nNational Park Service, Carpenter Ant\nhttps://www.nps.gov/articles/carpenter-ant.htm\n\nRoces & Núñez, 1989, Brood translocation and circadian variation of temperature preference in the ant Camponotus mus\nhttps://pubmed.ncbi.nlm.nih.gov/28312153/\n\nRajendran et al., 2026, Colony demographics shape nest construction in Camponotus fellah ants\nhttps://pubmed.ncbi.nlm.nih.gov/42017334/\n\n外敵の形態：University of Minnesota Extension / Rove beetle・Ground beetles、UC IPM / Earwigs\nhttps://ipm.ucanr.edu/home-and-landscape/earwigs/\n\n【音と絵】\n森の土の背景はこの作品のために生成したアートです。生物・巣・障害物は動的描画。アリはクロオオアリなどのオオアリ属の形態を参考に、6本の関節脚、腹柄、複眼、大顎、節のある腹部と触角、女王の2対の翅を描いています。歩行は左右交互の3本組を基本とし、障害物で移動が遅くなると歩調も遅くなります。外敵はハネカクシの短い上翅と露出した腹節、ハサミムシの尾のはさみ、オサムシの上翅の筋を描き分け、6本の関節脚、糸状触角、大顎を持ちます。外敵の歩調も移動距離に連動します。種の完全な形態復元や実測歩行の再現ではありません。BGM「土の下の午後」は独自のシンセサイザーで制作した穏やかなアンビエント曲です。広告・課金・通信・収集する個人情報はありません。")
     }
     private fun musicButton(): Button = button(if(music.enabled)"BGM ON"else"BGM OFF") {}.apply {
         setOnClickListener {music.setEnabled(!music.enabled);text=if(music.enabled)"BGM ON"else"BGM OFF";contentDescription=text}

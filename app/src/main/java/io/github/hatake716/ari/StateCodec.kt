@@ -36,10 +36,10 @@ object StateCodec {
             n.getJSONArray("tunnels").objects().map { Tunnel(it.getInt("a"),it.getInt("b")) }.toMutableList(),
             n.getJSONArray("obstacles").objects().map { Obstacle(it.getInt("a"),it.getInt("b"),it.getDouble("t"),ObstacleKind.valueOf(it.getString("kind"))) }.toMutableList(),
             n.getInt("queen"),n.getInt("shape"),n.getInt("size"))
-        require(nest.chambers.size in 2..20)
+        require(nest.chambers.size in 2..(NestGrowth.MAX_ROOMS+1))
         val ids = nest.chambers.map { it.id }
         require(ids.distinct().size == ids.size && 0 in ids && nest.queenRoom in ids && nest.queenRoom != 0)
-        require(nest.chambers.all { it.x in 0.0..1.0 && it.y in 0.0..1.0 && it.radius in .005.. .15 && it.built in 0.0..1.0 })
+        require(nest.chambers.all { it.x in 0.0..1.0 && it.y in 0.0..NestGrowth.MAX_DEPTH && it.radius in .005.. .15 && it.built in 0.0..1.0 })
         require(nest.tunnels.all { it.a in ids && it.b in ids && it.a != it.b })
         require(nest.obstacles.size <= 8 && nest.obstacles.all { b -> b.t in 0.0..1.0 && nest.tunnels.any { (it.a == b.a && it.b == b.b) || (it.a == b.b && it.b == b.a) } })
         require(nest.path(0,nest.queenRoom).isNotEmpty())

@@ -31,3 +31,10 @@ The **exact prompt set**, source output filenames and month-to-asset mapping are
 | December | Hoarfrost and a light snow dusting |
 
 `AntRenderer.kt` is an independently authored procedural model, with 24 cached walking poses per caste/wing state. It contains jointed legs, a petiole, layered gastral plates, surface grain and setae, compound eyes, toothed mandibles, segmented elbowed antennae, and two pairs of veined wings for alate queens. Antenna scanning uses a separate 16-pose bitmap cache so sensing can continue while legs rest. No AI insect sprite or specimen photograph is used as the ant model.
+
+
+## Predator and expanding nest models (1.2.0)
+
+`EnemyRenderer.kt` contains three authored procedural dorsal models, not copied insect photographs or downloaded meshes. It draws exposed abdominal plates and abbreviated elytra for rove beetles, paired terminal forceps for earwigs, and striated elytra for ground beetles. Anatomy references and limits are listed in BIOLOGY.md. All three use articulated legs and segmented filiform antennae; motion follows simulated displacement.
+
+The nest remains dynamic geometry. Additional depth reuses alternating mirrored strips of the existing soil image so adjacent edges meet. No new external bitmap assets were introduced. The full nest texture cache is bounded to four million pixels, and the brood/food layer to two million pixels. Static contents and soil crumbs are cached. Pausing stops redundant redraws. Natural growth comparison panels and model plates are rendered by Android instrumentation using the actual game code, not concept illustrations.

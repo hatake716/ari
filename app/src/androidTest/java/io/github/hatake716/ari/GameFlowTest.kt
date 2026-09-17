@@ -156,7 +156,7 @@ class GameFlowTest {
         click("この巣に、女王を迎える")
         click("7日/秒")
         assertTrue("A healthy, protected founding colony should reach the next generation",
-            device.wait(Until.hasObject(By.text("命は、次の巣へ。")),180000))
+            device.wait(Until.hasObject(By.text("命は、次の巣へ。")),330000))
         screenshot("10-natural-completion")
         click("観察に戻る")
         val saved=(store.read(0) as Slot.Saved).colony
