@@ -17,12 +17,14 @@
 
 | 成果物 | サイズ | SHA-256 |
 |---|---:|---|
-| ARI-1.1.0.apk | 10,589,833 bytes | `1375e045db73cc8303646dfb88833ca6171934aa6c961a4ec3d1134a6064bfa1` |
-| ARI-1.1.0.aab | 10,541,026 bytes | `ffb7367ff26d2ea06ddd1fc9f242232ac4d2c6a7cb67dbbf7588ed8fe1e870b4` |
+| ARI-1.1.0.apk | 10,589,845 bytes | `7448b74248882572cc545de886b20a62a186bb586f957879667f6ed3769c8f09` |
+| ARI-1.1.0.aab | 10,541,037 bytes | `e08ae16ba29ec811919bc87aadd8d8a17f3007444c5c55e4129333276bcbda19` |
 
 applicationId `io.github.hatake716.ari`、versionName `1.1.0`、versionCode `2`、minSdk 26 / targetSdk 36。APKはv2署名を検証し、AABは `jarsigner -verify` で検証。証明書SHA-256は1.0.0と同じ `2fb270c7569bae6250005da1781db98be3befa63cc0a5b13e4a01595b843e4e6`。APK/AAB内の12枚のWebPがソースと一致することを確認。オフラインで季節を表示できます。
 
 専用エミュレーターに署名付き1.0.0をインストールし、旧版で作成済みの創設14.1875日目のセーブを用意した後、署名付き1.1.0を `adb install -r` で上書き更新しました。インストール前後で保存JSONが完全一致し、更新後に巣を開くと「1年目 5月15日」の観察画面に戻ることを確認。保存スキーマはversion 1を維持しています。
+
+操作検証後、アプリ内解説の日本語の属名を「クロオオアリなどのオオアリ属」に訂正し、releaseを再生成、lint・署名・12枚の同梱物を再検証しました。描画・保存・生態・操作のコードに変更はありません。上のチェックサムは訂正後の配布物です。
 
 生成画の全プロンプトと月別対応は [ART.md](ART.md) と [season-artwork.json](season-artwork.json)、モデルの参考資料と簡略化の範囲は [BIOLOGY.md](BIOLOGY.md) に記録。
 
