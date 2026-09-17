@@ -1,0 +1,91 @@
+{
+  "tool": "built-in ImageGen",
+  "generated_on": "2026-09-17",
+  "encoding": "WebP quality 88, original dimensions, no crop or resizing",
+  "images": [
+    {
+      "month": 1,
+      "asset": "month-01.webp",
+      "source": "exec-6dbd8e0d-958d-4455-bd0f-fdcc82412d6d.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: January: midwinter, bare deciduous woodland, thin settled white snow and frost covering moss and fallen brown leaves; muted blue-grey daylight.",
+      "sha256": "345e7741ad47c8a026ac2e5671c9683db53b4d9103a3edf7e4211294fac9587d"
+    },
+    {
+      "month": 2,
+      "asset": "month-02.webp",
+      "source": "exec-9a66cf56-58f2-4d4a-b67c-fb943550960c.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: February: late winter thaw, patchy granular snow only in sheltered areas, wet black-brown leaf litter, bare woodland; cold pale sunlight.",
+      "sha256": "c72a4beefee1a0199b9690f0606a347bb0c90ace347c9d25d66956f91bfe426f"
+    },
+    {
+      "month": 3,
+      "asset": "month-03.webp",
+      "source": "exec-47a409bc-b26c-480f-a060-87e509c63963.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: March: early spring, snow gone, small fresh shoots among last year's brown oak leaves, tiny buds, fresh green moss; gentle cool daylight.",
+      "sha256": "cb3ef7d0c4e210fea17ce85975d32c58ab5bbcb857702f13b8106502754c7af5"
+    },
+    {
+      "month": 4,
+      "asset": "month-04.webp",
+      "source": "exec-2adad24d-616f-46b7-8fc6-953dfbade96a.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: April: spring, delicate fern fiddleheads, unfurling bright green seedlings, a few small fallen pale wild cherry petals; warm gentle daylight.",
+      "sha256": "5b7314be3abf49931bc2426a543d69a972ab51ec9ddb47ff4eeffc6df346496c"
+    },
+    {
+      "month": 5,
+      "asset": "month-05.webp",
+      "source": "exec-aee87d9e-c535-4028-8feb-943e8ede5124.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: May: early summer, fresh vivid green oak woodland, healthy moss, upright young grasses, dense small leaves; dappled sunlight.",
+      "sha256": "f0e01518ced6fcb2e003e898015bc45c8f81729d343f70da61327eb9a1fbe857"
+    },
+    {
+      "month": 6,
+      "asset": "month-06.webp",
+      "source": "exec-166c2917-7d4f-4a40-b61b-9fb1bd780dee.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: June: Japanese rainy season, rain-wet deep green moss and leaves with droplets, saturated dark leaf litter, humid hazy forest; diffuse overcast light.",
+      "sha256": "6eb5fb75e99d73a5968e852e8765ba590549f747c977f6c2d7bfcd5fd083f05e"
+    },
+    {
+      "month": 7,
+      "asset": "month-07.webp",
+      "source": "exec-1710ff16-e0b3-4a31-82b5-3caf6452a11d.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: July: midsummer, luxuriant deep green woodland and grasses, ferns, a few dry fragments among moss; stronger warm sunlight.",
+      "sha256": "5fecf9be5271c8a4452a42bbcacb58980c98c388a3b86b841c8c69ffe684fb77"
+    },
+    {
+      "month": 8,
+      "asset": "month-08.webp",
+      "source": "exec-152d28c8-0e85-439e-b7f3-958281c558d9.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: August: late hot summer, rich mature dark foliage with some dry grass tips and slightly dry tawny litter; warm amber sunlight.",
+      "sha256": "ee8b85fbe4c80ea56603874ddcea58763cd3ce970d2b15a24b86c3d87fae4194"
+    },
+    {
+      "month": 9,
+      "asset": "month-09.webp",
+      "source": "exec-b1219c74-198a-4185-8404-bb566ae4c365.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: September: early autumn, woodland still mostly green with scattered yellow leaves and a few tiny acorn fragments; soft low golden daylight.",
+      "sha256": "f5783f8cf4652fdbc957e157ec8edb59fd78abf53a2a0efd95014f25837cc077"
+    },
+    {
+      "month": 10,
+      "asset": "month-10.webp",
+      "source": "exec-4748a31b-c57a-4e78-8031-1ab2a0e27daf.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: October: autumn, amber yellow and russet deciduous leaves freshly scattered over moss, golden brown foliage in the blur; mellow sunlight.",
+      "sha256": "492ff6d6d7bef944f39707d1d938d4f5fc8909e89c9fac2b01cbe360b99637ce"
+    },
+    {
+      "month": 11,
+      "asset": "month-11.webp",
+      "source": "exec-e26f91c5-fdaf-4ca3-84e2-4d2cf9e5cfb9.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: November: late autumn, a thicker crisp copper-brown leaf carpet, a few red leaves, sparse faded grass and bare stems; cool subdued daylight.",
+      "sha256": "c283c82da8948de2444f9bfa0339018291041866d7392a60c0b06c792e174375"
+    },
+    {
+      "month": 12,
+      "asset": "month-12.webp",
+      "source": "exec-a64067e9-af08-487e-b76d-ddb71a66b58d.png",
+      "prompt": "Use case: lighting-weather. Asset type: photorealistic monthly environment texture for a scientific-inspired Android ant colony game. Input image 1 is the edit target. Create a 1024x1536 portrait variant of exactly this same woodland soil cross section. Change only the above-ground vegetation, leaf litter, snow, weather and light for the requested month in a temperate Japanese deciduous woodland. Keep the camera, scale, the soil horizon at exactly 11.5 percent from the top, all below-ground soil, minerals and roots and their positions unchanged. Upper forest air and the ground surface should look convincingly seasonal at small game scale. The lower 85 percent must remain the original uninterrupted brown soil. No tunnels, holes, ants, other animals, people, text, dates, logos or borders. The image must fill the canvas, no inset panels. Season: December: early winter, bare woodland, crystalline white frost on leaf margins, a very light dusting of snow on moss, mostly brown leaf litter; pale grey daylight.",
+      "sha256": "19a4dca440b3945c863f23e62a9982471fdca41d3cf64f91323a94bb5f5e66c0"
+    }
+  ]
+}

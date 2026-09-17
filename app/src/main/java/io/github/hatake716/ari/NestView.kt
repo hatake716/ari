@@ -17,7 +17,9 @@ class NestView(context: Context) : View(context) {
     var onEdit: ((Point) -> Unit)? = null
     var onInspect: ((String,String) -> Unit)? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val bitmap = BitmapFactory.decodeStream(context.assets.open("woodland-soil.png"))
+    private val bitmap = context.assets.open("woodland-soil.png").use { BitmapFactory.decodeStream(it) }
+    private val seasons = SeasonalBackground(context)
+    private val antRenderer = AntRenderer()
     private val rect = RectF()
     private var time = 0.0
     private var nestTexture: Bitmap? = null
@@ -31,19 +33,16 @@ class NestView(context: Context) : View(context) {
     private var downY=0f
     private var moved=false
     private val agents = mutableListOf<VisualAnt>()
-    private val antSprites = mutableMapOf<Int,Bitmap>()
-    private val spritePaint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val spriteRect=RectF()
     private val scaleDetector = ScaleGestureDetector(context,object: ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             if (!editing) {
-                zoom=(zoom*detector.scaleFactor).coerceIn(1f,3.2f)
+                zoom=(zoom*detector.scaleFactor).coerceIn(1f,6f)
                 clampPan(); moved=true; invalidate()
             }
             return true
         }
     })
-    private data class VisualAnt(val id: Int,var room: Int,var path: List<Int> = emptyList(),var edge: Int=0,var t: Double=0.0,var carrying: Boolean=false)
+    private data class VisualAnt(val id: Int,var room: Int,var path: List<Int> = emptyList(),var edge: Int=0,var t: Double=0.0,var carrying: Boolean=false,var distance: Double=0.0,var heading: Float=0f)
     init { isClickable=true; contentDescription="アリの巣の断面図。観察中はピンチで拡大、ドラッグで移動できます。" }
     fun resetCamera() { zoom=1f;panX=0f;panY=0f;invalidate() }
     private fun clampPan() {
@@ -51,17 +50,18 @@ class NestView(context: Context) : View(context) {
         panX=panX.coerceIn(-mx,mx); panY=panY.coerceIn(-my,my)
     }
     fun animate(seconds: Double, playing: Boolean) {
-        if (playing) time += seconds
         val c=colony
-        if (c != null && playing && !c.terminal) {
-            val outside=min(14,c.foragers)
+        val running=playing && c?.terminal!=true
+        if (running) time += seconds
+        if (c != null) {
+            val outside=if(c.winter)0 else min(14,c.foragers)
             val count=min(c.workers-outside,110-outside)
             while (agents.size > count) agents.removeAt(agents.lastIndex)
             while (agents.size < count) {
                 val rooms=c.nest.chambers.filter {it.id!=0 && it.built>=.95}
-                agents += VisualAnt(agents.size,rooms[agents.size%rooms.size].id)
+                agents += VisualAnt(agents.size,rooms[agents.size%rooms.size].id,heading=(agents.size*137.5f)%360)
             }
-            agents.forEach { a ->
+            if(running) agents.forEach { a ->
                 if (a.path.isEmpty() || a.edge >= a.path.lastIndex) {
                     a.room=a.path.lastOrNull() ?: a.room
                     if (c.nest.chambers.none { it.id == a.room }) a.room=c.nest.queenRoom
@@ -78,8 +78,19 @@ class NestView(context: Context) : View(context) {
                     val length=c.nest.room(from).point.distance(c.nest.room(to).point)
                     // Legible representative motion; biological age still follows the exact selected time multiplier.
                     val pace=.085*c.activity*(1+ln(c.speed.coerceAtLeast(1).toDouble())*.13)
-                    a.t+=seconds*pace/length*c.nest.localSpeed(from,to,a.t,false)
-                    if (a.t>=1) { a.t=0.0;a.edge++ }
+                    val start=c.nest.room(from).point;val end=c.nest.room(to).point
+                    val aspect=height.toDouble()/width.coerceAtLeast(1)
+                    val screenLength=hypot(end.x-start.x,(end.y-start.y)*aspect)
+                    val heading=Math.toDegrees(atan2((end.y-start.y)*aspect,end.x-start.x)).toFloat()
+                    a.heading=AntGait.turn(a.heading,heading,seconds)
+                    // Substeps keep the local obstacle slowdown visible at low frame rates.
+                    var remaining=seconds
+                    while(remaining>0 && a.t<1) {
+                        val dt=min(remaining,.02)
+                        val delta=min(1-a.t,dt*pace/length*c.nest.localSpeed(from,to,a.t,false))
+                        a.t+=delta;a.distance+=delta*screenLength;remaining-=dt
+                    }
+                    if (a.t>=1) { a.t=0.0;a.edge++;a.room=to }
                 }
             }
         }
@@ -91,11 +102,8 @@ class NestView(context: Context) : View(context) {
         val w=width.toFloat();val h=height.toFloat()
         canvas.save();canvas.translate(w/2+panX,h/2+panY);canvas.scale(zoom,zoom);canvas.translate(-w/2,-h/2)
         paint.reset();paint.isAntiAlias=true;paint.isFilterBitmap=true
-        canvas.drawBitmap(bitmap,null,RectF(0f,0f,w,h),paint)
+        seasons.draw(canvas,SeasonCalendar.date(colony?.day ?: 0.0),w,h)
         paint.color=Color.argb(34,15,14,9);canvas.drawRect(0f,0f,w,h,paint)
-        // Slightly translucent surface haze, distinct from the dark chambers below.
-        paint.shader=LinearGradient(0f,0f,0f,h*.20f,intArrayOf(0x153f5c2e,0x003f5c2e),null,Shader.TileMode.CLAMP)
-        canvas.drawRect(0f,0f,w,h*.20f,paint);paint.shader=null
         drawNestMaterial(canvas,nest,w,h)
         drawDebris(canvas,nest,w,h)
         nest.obstacles.forEach { block ->
@@ -118,24 +126,24 @@ class NestView(context: Context) : View(context) {
         if(c != null) {
             drawBrood(canvas,c,w,h)
             agents.forEach { a ->
-                var p=c.nest.room(a.room).point;var angle=0f
+                var p=c.nest.room(a.room).point
                 if (a.path.size>=2 && a.edge<a.path.lastIndex) {
                     val from=nest.room(a.path[a.edge]).point;val to=nest.room(a.path[a.edge+1]).point
                     p=from.mix(to,a.t)
-                    angle=Math.toDegrees(atan2((to.y-from.y)*h,(to.x-from.x)*w)).toFloat()
                 }
                 val resting=a.path.size<2 || a.edge>=a.path.lastIndex
-                val offset=sin(a.id*13.2)*w*(if(resting).031 else .006)
-                drawAnt(canvas,(p.x*w+offset).toFloat(),(p.y*h+cos(a.id*4.7)*w*(if(resting).018 else .004)).toFloat(),w*.0075f,angle,time*11+a.id,false,a.carrying,false)
+                val radius=nest.room(a.room).radius
+                val offset=sin(a.id*13.2)*w*(if(resting)radius*.62 else .006)
+                antRenderer.draw(canvas,(p.x*w+offset).toFloat(),(p.y*h+cos(a.id*4.7)*w*(if(resting)radius*.34 else .004)).toFloat(),w*.0082f*(.88f+(a.id%7)*.035f),a.heading,AntGait.phase(a.distance,a.id),false,a.carrying,false,time+a.id)
             }
             // Foraging traffic extends above ground and returns carrying pieces of food.
-            repeat(min(14,c.foragers)) { i ->
+            repeat(if(c.winter)0 else min(14,c.foragers)) { i ->
                 val phase=(time*.055*c.activity+i*.179)%1
                 val right=i%2==0
                 val turn=if(phase<.5) phase*2 else (1-phase)*2
                 val x=.5+(if(right)1 else -1)*turn*.40
                 val y=nest.room(0).y-.005-sin(turn*PI)*.016
-                drawAnt(canvas,(x*w).toFloat(),(y*h).toFloat(),w*.0075f,if((phase<.5)==right)0f else 180f,time*11+i,false,phase>.5,false)
+                antRenderer.draw(canvas,(x*w).toFloat(),(y*h).toFloat(),w*.0082f,if((phase<.5)==right)0f else 180f,AntGait.phase(time*.044*c.activity,i),false,phase>.5,false,time+i)
             }
             val queen=nest.room(nest.queenRoom)
             var queenPoint=queen.point;var angle=-12f
@@ -158,18 +166,21 @@ class NestView(context: Context) : View(context) {
                 canvas.clipPath(rubble);paint.reset();paint.isFilterBitmap=true
                 canvas.drawBitmap(bitmap,null,RectF(0f,0f,w,h),paint);canvas.restore();paint.isAntiAlias=true
             }
-            if(c.phase!=Phase.LOST) drawAnt(canvas,(queenPoint.x*w).toFloat(),(queenPoint.y*h-w*.010).toFloat(),w*.023f,angle,time*2,true,false,c.phase==Phase.ARRIVAL)
+            if(c.phase!=Phase.LOST) antRenderer.draw(canvas,(queenPoint.x*w).toFloat(),(queenPoint.y*h-w*.010).toFloat(),w*.020f,angle,if(c.phase==Phase.ARRIVAL)AntGait.phase(c.day*3)else 0.0,true,false,c.phase==Phase.ARRIVAL,time*.55)
             if(c.youngQueens>0) repeat(min(c.youngQueens,6)) { i ->
-                var p=Point(queen.x+.014+i*.008,queen.y+.030)
+                var p=Point(queen.x+.014+i*.015,queen.y+.030)
+                var youngHeading=-85f
                 if(c.phase==Phase.FLIGHT || c.phase==Phase.CLEARED) {
                     val progress=(c.flightProgress*1.22-i*.035).coerceIn(0.0,1.0)
                     if(progress<.6) {
                         val route=nest.path(nest.queenRoom,0)
                         val t=progress/.6*(route.size-1);val idx=t.toInt().coerceAtMost(route.size-2)
-                        p=nest.room(route[idx]).point.mix(nest.room(route[idx+1]).point,t-idx)
+                        val from=nest.room(route[idx]).point;val to=nest.room(route[idx+1]).point
+                        p=from.mix(to,t-idx)
+                        youngHeading=Math.toDegrees(atan2((to.y-from.y)*h,(to.x-from.x)*w)).toFloat()
                     } else p=Point(.5+(i-2.5)*.12*(progress-.6)/.4,nest.room(0).y-(progress-.6)*.8)
                 }
-                drawAnt(canvas,(p.x*w).toFloat(),(p.y*h).toFloat(),w*.017f,-85f,time*12+i,true,false,true)
+                antRenderer.draw(canvas,(p.x*w).toFloat(),(p.y*h).toFloat(),w*.017f,youngHeading,AntGait.phase(c.flightProgress,i),true,false,true,time+i)
             }
             c.invader?.let { enemy -> c.enemyPoint()?.let { p -> drawEnemy(canvas,enemy,(p.x*w).toFloat(),(p.y*h).toFloat(),w) } }
         }
@@ -296,49 +307,6 @@ class NestView(context: Context) : View(context) {
             val x=(store.x*w+sin(i*5.77)*w*.033).toFloat();val y=(store.y*h+cos(i*4.13)*w*.014).toFloat()
             oval(c,x-2,y-1,x+3,y+2,if(i%3==0)0xff8b5e36.toInt()else 0xff89915a.toInt())
         }
-    }
-    private fun drawAnt(c: Canvas,x: Float,y: Float,s: Float,angle: Float,t: Double,queen: Boolean,food: Boolean,wings: Boolean) {
-        val gait=((t/(2*PI)*12).toInt()%12+12)%12
-        val key=gait+(if(queen)16 else 0)+(if(food)32 else 0)+(if(wings)64 else 0)
-        val sprite=antSprites.getOrPut(key) {
-            Bitmap.createBitmap(160,128,Bitmap.Config.ARGB_8888).also {
-                renderAnt(Canvas(it),80f,64f,32f,0f,gait*2*PI/12,queen,food,wings)
-            }
-        }
-        c.save();c.translate(x,y);c.rotate(angle)
-        spriteRect.set(-s*2.5f,-s*2f,s*2.5f,s*2f)
-        c.drawBitmap(sprite,null,spriteRect,spritePaint)
-        c.restore()
-    }
-    private fun renderAnt(c: Canvas,x: Float,y: Float,s: Float,angle: Float,t: Double,queen: Boolean,food: Boolean,wings: Boolean) {
-        c.save();c.translate(x,y);c.rotate(angle)
-        // Six jointed legs connect to the thorax; antennae are elbowed.
-        for(side in listOf(-1,1)) for(leg in 0..2) {
-            val hip=(-.4f+leg*.37f)*s;val sweep=sin(t+leg*2.2+side)*.33f*s
-            val kneeX=hip+(-.65f+leg*.6f)*s+sweep.toFloat()
-            line(c,hip,side*s*.22f,kneeX,side*s*.77f,0xff231f16.toInt(),s*.15f)
-            line(c,kneeX,side*s*.77f,kneeX-s*.28f+sweep.toFloat(),side*s*1.23f,0xff504a35.toInt(),s*.075f)
-        }
-        if(wings) {
-            paint.color=0x88e4e4be.toInt()
-            c.save();c.rotate(-18f+(sin(t*3)*5).toFloat());c.drawOval(-s*1.8f,-s*1.4f,s*.35f,-s*.1f,paint);c.restore()
-            c.save();c.rotate(18f-(sin(t*3)*5).toFloat());c.drawOval(-s*1.8f,s*.1f,s*.35f,s*1.4f,paint);c.restore()
-        }
-        val abdomen=if(queen)1.04f else .77f
-        paint.shader=RadialGradient(-s*.85f,-s*.22f,s*1.10f,intArrayOf(0xff716856.toInt(),0xff282c23.toInt(),0xff090e0c.toInt()),floatArrayOf(0f,.35f,1f),Shader.TileMode.CLAMP)
-        c.drawOval(-s*(.65f+abdomen),-s*.55f,-s*.3f,s*.55f,paint);paint.shader=null
-        line(c,-s*.7f,-s*.42f,-s*.62f,s*.40f,0x665e604c,s*.07f)
-        oval(c,-s*.4f,-s*.20f,-s*.07f,s*.2f,0xff181e17.toInt())
-        paint.shader=RadialGradient(s*.13f,-s*.13f,s*.66f,intArrayOf(0xff5b5845.toInt(),0xff151c16.toInt()),null,Shader.TileMode.CLAMP)
-        c.drawOval(-s*.13f,-s*.32f,s*.64f,s*.32f,paint);paint.shader=null
-        oval(c,s*.60f,-s*.37f,s*1.26f,s*.37f,0xff22291f.toInt())
-        oval(c,s*.72f,-s*.31f,s*.88f,-s*.18f,0xffb4af88.toInt())
-        for(side in listOf(-1,1)) {
-            line(c,s*1.12f,side*s*.20f,s*1.5f,side*s*.55f,0xff7d7860.toInt(),s*.08f)
-            line(c,s*1.5f,side*s*.55f,s*1.92f,side*s*.46f,0xff7d7860.toInt(),s*.065f)
-        }
-        if(food) oval(c,s*1.38f,-s*.33f,s*2.05f,s*.35f,0xff91a762.toInt())
-        c.restore()
     }
     private fun drawEnemy(c: Canvas,enemy: Invader,x: Float,y: Float,w: Float) {
         val s=w*.026f

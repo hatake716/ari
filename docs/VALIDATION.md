@@ -1,3 +1,38 @@
+# 検証記録 — 1.1.0
+
+2026年9月18日、JDK 17 / Android SDK 36 / 専用API 35エミュレーター（emulator-5554）で検証。
+
+## ビルド・モデル・操作
+
+- `testDebugUnitTest`: **30件成功、失敗0**（既存24件＋暦と歩行の6件）。全月境界、2月28日、年越し、365日周期、従来スキーマの保存復元、留守中の月越し、三脚の位相、障害物と歩調、短い方向への旋回を確認。
+- `lintRelease`: **エラー0、警告33**。更新提案、縦画面、描画時の割り当て、文字列など。baselineによる非表示なし。
+- `assembleRelease`, `bundleRelease`, `assembleDebug`, `assembleDebugAndroidTest`: **成功**。
+- 専用エミュレーターの `AndroidJUnitRunner`: **14件成功、失敗0、141.407秒**（既存GameFlowTest 10件＋VisualSeasonTest 4件）。
+- 巣づくりから女王1匹で始め、小枝・小石を配置して7日/秒で観察する通常プレイが、外敵撃退・巣の拡張・子女王の旅立ちまで成功。保存されたCLEARED状態、働きアリ・子女王・撃退数・容量増加を検証。
+- 5月31日→6月1日の実際の早送り、1月15日の保存枠を再開しActivityを再生成した後の暦表示、12種類の異なる背景画像、最大2枚の背景キャッシュを確認。
+- 同一の描画エンジンから働きアリ・女王・有翅女王の比較画像を出力し、全24歩行ポーズの描画を確認。一時停止時とゲーム終了後に脚・触角を含む画像が完全に停止することを画素比較で検証。
+- 初期実装では触角の逐次描画がエミュレーター上で約22fpsに低下したため、16ポーズの独立キャッシュへ変更。最終コードで通常プレイと全操作テストをやり直して成功。最終観察ログはおおむね28〜29fps。実機性能の測定ではありません。
+
+## 配布と旧版の更新
+
+| 成果物 | サイズ | SHA-256 |
+|---|---:|---|
+| ARI-1.1.0.apk | 10,589,833 bytes | `1375e045db73cc8303646dfb88833ca6171934aa6c961a4ec3d1134a6064bfa1` |
+| ARI-1.1.0.aab | 10,541,026 bytes | `ffb7367ff26d2ea06ddd1fc9f242232ac4d2c6a7cb67dbbf7588ed8fe1e870b4` |
+
+applicationId `io.github.hatake716.ari`、versionName `1.1.0`、versionCode `2`、minSdk 26 / targetSdk 36。APKはv2署名を検証し、AABは `jarsigner -verify` で検証。証明書SHA-256は1.0.0と同じ `2fb270c7569bae6250005da1781db98be3befa63cc0a5b13e4a01595b843e4e6`。APK/AAB内の12枚のWebPがソースと一致することを確認。オフラインで季節を表示できます。
+
+専用エミュレーターに署名付き1.0.0をインストールし、旧版で作成済みの創設14.1875日目のセーブを用意した後、署名付き1.1.0を `adb install -r` で上書き更新しました。インストール前後で保存JSONが完全一致し、更新後に巣を開くと「1年目 5月15日」の観察画面に戻ることを確認。保存スキーマはversion 1を維持しています。
+
+生成画の全プロンプトと月別対応は [ART.md](ART.md) と [season-artwork.json](season-artwork.json)、モデルの参考資料と簡略化の範囲は [BIOLOGY.md](BIOLOGY.md) に記録。
+
+- 実行ログ・署名検証・更新証跡: ローカルの `artifacts/validation-v1.1/`。
+- 配布コピーとチェックサム: `artifacts/release/v1.1.0/`。
+- 描画の比較: [アリ](screenshots/ant-models.png)、[12か月](screenshots/twelve-months.png)、[冬の観察画面](screenshots/winter-ui.png)。モデル比較と冬画面は検証用状態です。
+- 日常利用の実機へのインストールや実機の見た目・性能・聴感は未確認。Google Playへのアップロード・審査申請・公開も行っていません。
+
+---
+
 # 検証記録 — 1.0.0
 
 2026年9月17日、JDK 17 / Android SDK 36 / API 35 Androidエミュレーター（emulator-5554）で検証。

@@ -2,8 +2,8 @@
 
 - 表示名: アリの巣
 - applicationId: `io.github.hatake716.ari`
-- versionName: `1.0.0`
-- versionCode: `1`
+- versionName: `1.1.0`
+- versionCode: `2`
 - minSdk: `26` / compileSdk・targetSdk: `36`
 - JDK: 17 / Gradle: 8.14.3 / AGP: 8.13.0 / Kotlin: 2.2.20
 
@@ -40,7 +40,7 @@ $ANDROID_HOME/build-tools/36.0.0/apksigner verify --verbose --print-certs app/bu
 sha256sum app/build/outputs/apk/release/app-release.apk app/build/outputs/bundle/release/app-release.aab
 ```
 
-UIテストは専用エミュレーターの本アプリの保存枠を初期化します。日常利用の実機を対象に実行しないでください。テストのスクリーンショットはエミュレーター内のアプリ外部files/validationに出力されます。
+UIテストは専用エミュレーターの本アプリの保存枠を初期化します。日常利用の実機を対象に実行しないでください。テストのスクリーンショットはエミュレーター内のアプリ外部files/validationとfiles/visual-v1.1に出力されます。
 
 リリース鍵・デバッグ鍵が違うAPKは互換更新できません。ユーザーの保存データを守るため、実機の既存アプリを無断で削除して署名不一致を解消しないでください。
 
@@ -49,3 +49,10 @@ UIテストは専用エミュレーターの本アプリの保存枠を初期化
 ゲームは端末内で完結します。ネットワーク権限、広告SDK、分析SDK、アカウント登録はありません。保存データはアプリの内部ストレージに3枠、BGM設定はSharedPreferencesに保存します。アプリの削除・ストレージ消去で保存も失われます。バックアップは無効に設定しています。
 
 AtomicFileを使用し、読み取り不能のデータは一覧で明示して元ファイルを保持します。新しいスキーマへの互換性がない場合も黙って初期化しません。保存時のディスクエラーは観察画面に表示します。
+
+
+## 1.1.0
+
+配布コピーは `artifacts/release/v1.1.0/ARI-1.1.0.apk` と `ARI-1.1.0.aab`。同じディレクトリに `manifest.json` と `SHA256SUMS` を置いています。12か月の背景はすべて同梱され、起動後のダウンロードは不要です。
+
+1.0.0と同じ署名鍵、同じapplicationId、保存スキーマversion 1を使います。暦は既存の経過日数から計算するため、季節用のセーブデータ変換は不要です。
