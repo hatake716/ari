@@ -2,8 +2,8 @@
 
 - 表示名: アリの巣
 - applicationId: `io.github.hatake716.ari`
-- versionName: `1.2.0`
-- versionCode: `3`
+- versionName: `1.2.1`
+- versionCode: `4`
 - minSdk: `26` / compileSdk・targetSdk: `36`
 - JDK: 17 / Gradle: 8.14.3 / AGP: 8.13.0 / Kotlin: 2.2.20
 
@@ -61,3 +61,8 @@ AtomicFileを使用し、読み取り不能のデータは一覧で明示して�
 ## 1.2.0
 
 配布コピーは `artifacts/release/v1.2.0/ARI-1.2.0.apk` と `ARI-1.2.0.aab`。外敵の描画と増室処理を更新し、観察画面に室数・掘削進捗・全体表示を追加しています。applicationIdと署名鍵、保存スキーマversion 1は継続。旧版の保存をそのまま読めます。深い巣・48室を保存できるよう座標と室数の検証上限を広げたため、新版で増室した保存を旧版へ戻す操作は対象外です。追加の描画・成長テストの画像は専用エミュレーターの外部files/visual-v1.2へ出力します。
+
+
+## 1.2.1
+
+エンディングから同じ保存枠の巣の建設モードへ進む操作を追加。終了済みの保存枠を開き直した場合もエンディングを表示します。新たな女王を迎えるまで前の巣の保存は保持し、建設を中断した場合には旧記録を残します。保存形式・署名鍵・applicationIdは継続しています。配布コピーは `artifacts/release/v1.2.1/ARI-1.2.1.apk` と `ARI-1.2.1.aab` です。

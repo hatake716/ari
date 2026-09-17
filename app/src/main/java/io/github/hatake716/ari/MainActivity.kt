@@ -189,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 val before=c.day
                 c.advanceDays(StateCodec.offlineDays(c,System.currentTimeMillis()))
                 colony=c;endShown=c.terminal;showGame();saveCurrent()
+                if(c.terminal)showEnding(c)
                 if(c.day-before>=.01)Toast.makeText(this,String.format(java.util.Locale.JAPAN,"留守の間に %.1f 時間が経過しました",(c.day-before)*24),Toast.LENGTH_LONG).show()
             }
         }
@@ -358,9 +359,15 @@ class MainActivity : ComponentActivity() {
         info("巣 0${slot+1} の観察記録",c.journal.asReversed().joinToString("\n\n"){"${formatDay(it.day)}\n${it.text}"})
     }
     private fun showEnding(c: Colony) {
+        val body=if(c.phase==Phase.CLEARED)
+            "${formatDay(c.day)}。${c.youngQueens}匹の子女王が、翅を広げて旅立ちました。\n\n女王から子女王へ、世代は新しい巣に受け継がれます。母女王は元の巣に残ります。\n\n働きアリ ${c.workers}匹 / 撃退 ${c.repelled}回\nこの巣の記録は保存されています。"
+        else "${c.journal.lastOrNull()?.text}\n\n${formatDay(c.day)} / 撃退 ${c.repelled}回\n\n入口から女王室までの距離、障害物と採餌のバランスで、群れの育ち方は変わります。記録を読み、新しい巣で観察を始められます。"
         info(if(c.phase==Phase.CLEARED)"命は、次の巣へ。"else"巣の灯が消えました。",
-            if(c.phase==Phase.CLEARED)"${formatDay(c.day)}。${c.youngQueens}匹の子女王が、翅を広げて旅立ちました。\n\n女王から子女王へ、世代は新しい巣に受け継がれます。母女王は元の巣に残ります。\n\n働きアリ ${c.workers}匹 / 撃退 ${c.repelled}回\nこの巣の記録は保存されています。"
-            else "${c.journal.lastOrNull()?.text}\n\n${formatDay(c.day)} / 撃退 ${c.repelled}回\n\n入口から女王室までの距離、障害物と採餌のバランスで、群れの育ち方は変わります。記録を読み、新しい巣で観察を始められます。")
+            body+"\n\n新しい女王を迎えると、この保存枠は新しい巣に置き換わります。",
+            "新たな女王アリを迎える巣を作る") {
+            // Keep the completed save until the player starts the newly designed colony.
+            draft=Nest.create();editorTool="queen";showEditor()
+        }
     }
     private fun showGuide() {
         info("この小さな世界について", "【遊び方】\nはじめに巣の形・広さを選び、部屋を追加し、女王室を決めます。通路に小枝や小石を置くと、外敵と働きアリの両方の足が遅くなります。障害物は最大8個。開始後の巣はアリたちに任せます。\n\n【観察の操作】\n1倍は現実と同じ時間です。60倍、1時間/秒、1日/秒、7日/秒で早送りできます。女王の到着・外敵の襲来・子女王の旅立ちは最大1時間/秒に自動で減速します。Ⅱで一時停止。ピンチで全体表示から最大10倍まで拡大、ドラッグで移動。「全体」で巣の端まで見渡せます。部屋をタップすると詳しく観察できます。\n\n【季節と暦】\n5月1日に始まり、ゲーム内の月が変わると12種類の林床の背景が切り替わります。芽吹き、新緑、梅雨、紅葉、落ち葉、霜や雪を観察できます。暦はうるう年のない365日周期です。画面の年目は巣の創設から数えます。端末の実際の月ではなく、早送りした巣の時間に連動します。\n\n【3つの巣と留守の間】\n10秒ごととアプリを閉じるときに自動保存。再開時には現実に経過した時間（最大30日）が進みます。選んだ早送り倍率は留守中に掛かりません。一時停止した巣は留守中も止まります。保存枠は一覧で長押しすると削除できます。\n\n【生態のモデル】\n温帯のアリを参考にした、特定種を断定しないモデルです。女王は産卵し、働きアリは育児・採餌・掘削・防衛を行います。創設時の女王は体内の蓄えで子を育てます。卵18日→幼虫22日→蛹20日（温暖時の基準）で成虫へ。寒い季節には活動と発育が遅くなります。\n\n【群れと巣の成長】\n群れが増えると働きアリが新しい通路を掘り、その先を育児室・貯蔵室・休息室へ広げます。工事の進捗は断面と上部に表示されます。完成した部屋へ幼体・食料・働きアリが分散し、最大48室まで地中へ拡大します。冬や外敵への防衛中は掘削も遅くなります。部屋の配置と用途は観察用の簡略モデルです。\n\n【次の世代へ】\n創設3年、または1年以上かつ収容目安の155%を超える過密で、80匹以上の働きアリと食料があれば子女王を育て始めます。子女王は基準80日で羽化し、12日以上の成熟期間と暖かな日を待って雄と旅立ちます。子女王の旅立ちでクリアです。\n\nここでの「女王の交代」は新しい巣への世代継承を指します。母女王を子女王が必ず置き換えるという生態ではありません。母女王は元の巣に残ります。\n\n【再現の範囲】\n卵の性・カースト分化、栄養、季節、侵入虫との戦いは簡略化しています。日数・寿命・成長率・過密による繁殖・襲撃周期・小枝と小石の効果はゲーム用の設定で、実測値ではありません。画面の働きアリは最大240匹の代表表示で、全個体数は上部の数字に表示します。歩行は観察しやすい速さで、発育の時間とは別に表示しています。\n\n【参考資料】\nArizona State University, Life Cycle of an Ant Colony\nhttps://askabiologist.asu.edu/ant-colony-life-cycle\n\nNational Park Service, Carpenter Ant\nhttps://www.nps.gov/articles/carpenter-ant.htm\n\nRoces & Núñez, 1989, Brood translocation and circadian variation of temperature preference in the ant Camponotus mus\nhttps://pubmed.ncbi.nlm.nih.gov/28312153/\n\nRajendran et al., 2026, Colony demographics shape nest construction in Camponotus fellah ants\nhttps://pubmed.ncbi.nlm.nih.gov/42017334/\n\n外敵の形態：University of Minnesota Extension / Rove beetle・Ground beetles、UC IPM / Earwigs\nhttps://ipm.ucanr.edu/home-and-landscape/earwigs/\n\n【音と絵】\n森の土の背景はこの作品のために生成したアートです。生物・巣・障害物は動的描画。アリはクロオオアリなどのオオアリ属の形態を参考に、6本の関節脚、腹柄、複眼、大顎、節のある腹部と触角、女王の2対の翅を描いています。歩行は左右交互の3本組を基本とし、障害物で移動が遅くなると歩調も遅くなります。外敵はハネカクシの短い上翅と露出した腹節、ハサミムシの尾のはさみ、オサムシの上翅の筋を描き分け、6本の関節脚、糸状触角、大顎を持ちます。外敵の歩調も移動距離に連動します。種の完全な形態復元や実測歩行の再現ではありません。BGM「土の下の午後」は独自のシンセサイザーで制作した穏やかなアンビエント曲です。広告・課金・通信・収集する個人情報はありません。")
@@ -368,11 +375,11 @@ class MainActivity : ComponentActivity() {
     private fun musicButton(): Button = button(if(music.enabled)"BGM ON"else"BGM OFF") {}.apply {
         setOnClickListener {music.setEnabled(!music.enabled);text=if(music.enabled)"BGM ON"else"BGM OFF";contentDescription=text}
     }
-    private fun info(title: String,body: String) {
+    private fun info(title: String,body: String,positiveText: String="観察に戻る",onPositive: (() -> Unit)?=null) {
         val scroll=ScrollView(this)
         val content=text(body,14f,cream).apply {setPadding(dp(24),dp(14),dp(24),dp(20));setLineSpacing(dp(5).toFloat(),1.05f);setTextIsSelectable(true);autoLinkMask=android.text.util.Linkify.WEB_URLS}
         scroll.addView(content)
-        dialog(AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("観察に戻る",null).create())
+        dialog(AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton(positiveText){_,_->onPositive?.invoke()}.create())
     }
     private fun dialog(alert: AlertDialog) {
         dialogCount++
