@@ -28,6 +28,7 @@ class NestView(context: Context) : View(context) {
     private var textureKey = ""
     private var contentsTexture: Bitmap? = null
     private var contentsKey = ""
+    private val viewport=RectF()
     private var lastSceneState = ""
     private var lastX=0f
     private var lastY=0f
@@ -38,7 +39,11 @@ class NestView(context: Context) : View(context) {
     private val scaleDetector = ScaleGestureDetector(context,object: ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             if (!editing) {
-                camera.zoom=(camera.zoom*detector.scaleFactor).coerceIn(1f,10f)
+                val focus=camera.fromScreen(detector.focusX,detector.focusY,width,height)
+                camera.zoom=(camera.zoom*detector.scaleFactor).coerceIn(1f,camera.maxZoom)
+                val movedFocus=camera.toScreen(focus,width,height)
+                camera.panX+=(detector.focusX-movedFocus.x).toFloat()
+                camera.panY+=(detector.focusY-movedFocus.y).toFloat()
                 clampPan(); describeCamera(); moved=true; invalidate()
             }
             return true
@@ -82,20 +87,21 @@ class NestView(context: Context) : View(context) {
                 }
                 if (a.path.size >= 2 && a.edge < a.path.lastIndex) {
                     val from=a.path[a.edge];val to=a.path[a.edge+1]
-                    val length=NestGrowth.point(c.nest,from).distance(NestGrowth.point(c.nest,to)).coerceAtLeast(.001)
+                    val length=(c.nest.tunnelLength(from,to)*min(1.0,min(c.nest.room(from).built,c.nest.room(to).built)/NestGrowth.TUNNEL_SHARE)).coerceAtLeast(.001)
                     // Legible representative motion; biological age still follows the exact selected time multiplier.
                     val pace=.085*c.activity*(1+ln(c.speed.coerceAtLeast(1).toDouble())*.13)
-                    val start=NestGrowth.point(c.nest,from);val end=NestGrowth.point(c.nest,to)
                     val aspect=height.toDouble()/width.coerceAtLeast(1)
-                    val screenLength=hypot(end.x-start.x,(end.y-start.y)*aspect)
-                    val heading=Math.toDegrees(atan2((end.y-start.y)*aspect,end.x-start.x)).toFloat()
+                    val heading=tunnelHeading(c.nest,from,to,a.t,width.toFloat(),height.toFloat())
                     a.heading=AntGait.turn(a.heading,heading,seconds)
                     // Substeps keep the local obstacle slowdown visible at low frame rates.
                     var remaining=seconds
                     while(remaining>0 && a.t<1) {
                         val dt=min(remaining,.02)
                         val delta=min(1-a.t,dt*pace/length*c.nest.localSpeed(from,to,a.t,false))
-                        a.t+=delta;a.distance+=delta*screenLength;remaining-=dt
+                        val before=NestGrowth.visiblePoint(c.nest,from,to,a.t)
+                        a.t+=delta
+                        val after=NestGrowth.visiblePoint(c.nest,from,to,a.t)
+                        a.distance+=hypot(after.x-before.x,(after.y-before.y)*aspect);remaining-=dt
                     }
                     if (a.t>=1) { a.t=0.0;a.edge++;a.room=to }
                 }
@@ -109,24 +115,27 @@ class NestView(context: Context) : View(context) {
         super.onDraw(canvas)
         val nest=draft ?: colony?.nest ?: return
         val w=width.toFloat();val h=height.toFloat()
-        camera.depth=if(editing)1.0 else nest.depth
+        if(editing){camera.depth=1.0;camera.left=0.0;camera.right=1.0}else camera.fit(nest)
         clampPan()
         val worldHeight=(h*camera.depth).toFloat()
         canvas.drawColor(0xff231d13.toInt())
-        canvas.save();canvas.translate(w/2+camera.panX,h/2+camera.panY);canvas.scale(camera.scale,camera.scale);canvas.translate(-w/2,-worldHeight/2)
+        canvas.save();canvas.translate(w/2+camera.panX,h/2+camera.panY);canvas.scale(camera.scale,camera.scale);canvas.translate((-w*(camera.left+camera.right)/2).toFloat(),-worldHeight/2)
         paint.reset();paint.isAntiAlias=true;paint.isFilterBitmap=true
+        val topLeft=camera.fromScreen(0f,0f,width,height)
+        val bottomRight=camera.fromScreen(w,h,width,height)
+        viewport.set((topLeft.x*w).toFloat(),(topLeft.y*h).toFloat(),(bottomRight.x*w).toFloat(),(bottomRight.y*h).toFloat())
         // Repeat the soil beyond the original sheet, keeping the seasonal surface at its true height.
-        for(column in -2..2) {
+        for(column in floor(topLeft.x).toInt()..floor(bottomRight.x).toInt()) {
             canvas.save();canvas.translate(column*w,0f)
             if(column.mod(2)==1){canvas.translate(w,0f);canvas.scale(-1f,1f)}
             seasons.draw(canvas,SeasonCalendar.date(colony?.day ?: 0.0),w,h)
             drawDeepSoil(canvas,w,h,worldHeight)
             canvas.restore()
         }
-        paint.color=Color.argb(34,15,14,9);canvas.drawRect(-2*w,0f,3*w,worldHeight,paint)
+        paint.color=Color.argb(34,15,14,9);canvas.drawRect(viewport,paint)
         drawNestMaterial(canvas,nest,w,h)
         nest.obstacles.forEach { block ->
-            val p=nest.room(block.a).point.mix(nest.room(block.b).point,block.t)
+            val p=nest.tunnelPoint(block.a,block.b,block.t)
             canvas.save();canvas.translate((p.x*w).toFloat(),(p.y*h).toFloat());canvas.rotate(if (block.kind==ObstacleKind.TWIG) -32f else 18f)
             if (block.kind==ObstacleKind.TWIG) {
                 line(canvas,-w*.025f,2f,w*.025f,-2f,0xff25170f.toInt(),w*.015f)
@@ -147,8 +156,7 @@ class NestView(context: Context) : View(context) {
             agents.forEach { a ->
                 var p=NestGrowth.point(c.nest,a.room)
                 if (a.path.size>=2 && a.edge<a.path.lastIndex) {
-                    val from=NestGrowth.point(nest,a.path[a.edge]);val to=NestGrowth.point(nest,a.path[a.edge+1])
-                    p=from.mix(to,a.t)
+                    p=NestGrowth.visiblePoint(nest,a.path[a.edge],a.path[a.edge+1],a.t)
                 }
                 val resting=a.path.size<2 || a.edge>=a.path.lastIndex
                 val radius=nest.room(a.room).radius*sqrt(NestGrowth.chamberProgress(nest.room(a.room)))
@@ -176,10 +184,9 @@ class NestView(context: Context) : View(context) {
                 val route=nest.path(0,nest.queenRoom)
                 val progress=(c.day/.25).coerceIn(0.0,.9999)*(route.size-1)
                 val index=progress.toInt()
-                val from=nest.room(route[index]).point;val to=nest.room(route[min(index+1,route.lastIndex)]).point
-                queenPoint=from.mix(to,progress-index);angle=Math.toDegrees(atan2((to.y-from.y)*h,(to.x-from.x)*w)).toFloat()
+                queenPoint=nest.tunnelPoint(route[index],route[min(index+1,route.lastIndex)],progress-index);angle=tunnelHeading(nest,route[index],route[min(index+1,route.lastIndex)],progress-index,w,h)
             }
-            if(c.phase==Phase.LOST) {
+            if(c.phase==Phase.LOST && !c.queenDiedOfAge) {
                 // Collapsed soil covers the breached queen chamber after the colony is lost.
                 canvas.save()
                 val qx=(queen.x*w).toFloat();val qy=(queen.y*h).toFloat();val radius=(queen.radius*w).toFloat()
@@ -200,16 +207,15 @@ class NestView(context: Context) : View(context) {
                     if(progress<.6) {
                         val route=nest.path(nest.queenRoom,0)
                         val t=progress/.6*(route.size-1);val idx=t.toInt().coerceAtMost(route.size-2)
-                        val from=nest.room(route[idx]).point;val to=nest.room(route[idx+1]).point
-                        p=from.mix(to,t-idx)
-                        youngHeading=Math.toDegrees(atan2((to.y-from.y)*h,(to.x-from.x)*w)).toFloat()
+                        p=nest.tunnelPoint(route[idx],route[idx+1],t-idx)
+                        youngHeading=tunnelHeading(nest,route[idx],route[idx+1],t-idx,w,h)
                     } else p=Point(.5+(i-2.5)*.12*(progress-.6)/.4,nest.room(0).y-(progress-.6)*.8)
                 }
                 antRenderer.draw(canvas,(p.x*w).toFloat(),(p.y*h).toFloat(),w*.017f,youngHeading,AntGait.phase(c.flightProgress,i),true,false,true,time+i)
             }
             c.invader?.let { enemy -> c.enemyPoint()?.let { p -> drawEnemy(canvas,nest,enemy,(p.x*w).toFloat(),(p.y*h).toFloat(),w,h) } }
         }
-        if(showLabels) {
+        if(showLabels && w*camera.scale*.024f>=9) {
             nest.chambers.filter { it.id!=0 && it.built>=1 }.forEach { room ->
                 val name=nest.roomName(room)
                 label(canvas,name,(room.x*w).toFloat(),(room.y*h+room.radius*w*.76+15).toFloat(),w*.024f,room.id==nest.queenRoom)
@@ -232,10 +238,10 @@ class NestView(context: Context) : View(context) {
             paint.pathEffect=null;paint.style=Paint.Style.FILL
         }
         // Depth ruler and scale belong to the scene and zoom with it.
-        line(canvas,w*.945f,h*.30f,w*.945f,worldHeight-h*.12f,0x66e5dac5,1f)
-        for(i in 0..((camera.depth-.3)/.13).toInt()) {
+        line(canvas,(camera.right*w-w*.055).toFloat(),h*.30f,(camera.right*w-w*.055).toFloat(),worldHeight-h*.12f,0x66e5dac5,1f)
+        for(i in max(0,((topLeft.y-.3)/.13).toInt())..((min(camera.depth,bottomRight.y)-.3)/.13).toInt()) {
             val y=h*(.30f+i*.13f)
-            line(canvas,w*.933f,y,w*.947f,y,0x88e5dac5.toInt(),1f)
+            line(canvas,(camera.right*w-w*.067).toFloat(),y,(camera.right*w-w*.053).toFloat(),y,0x88e5dac5.toInt(),1f)
         }
         label(canvas,"土の断面",w*.86f,worldHeight-h*.04f,w*.022f,false)
         canvas.restore()
@@ -244,50 +250,70 @@ class NestView(context: Context) : View(context) {
             text(canvas,String.format(java.util.Locale.JAPAN,"× %.1f",camera.zoom),w-53,33f,14f,0xffe5e7d7.toInt(),Paint.Align.CENTER)
         }
     }
+    private fun visible(room:Chamber,w:Float,h:Float):Boolean {
+        val margin=w*room.radius*1.8f
+        return room.x*w+margin>=viewport.left && room.x*w-margin<=viewport.right && room.y*h+margin>=viewport.top && room.y*h-margin<=viewport.bottom
+    }
+    private fun layer(maxPixels:Double):Pair<Bitmap,Canvas> {
+        val resolution=min(1.0,sqrt(maxPixels/(width.toDouble()*height))).toFloat()
+        val bitmap=Bitmap.createBitmap((width*resolution).toInt().coerceAtLeast(1),(height*resolution).toInt().coerceAtLeast(1),Bitmap.Config.ARGB_8888)
+        return bitmap to Canvas(bitmap).apply {
+            scale(resolution*camera.scale,resolution*camera.scale);translate(-viewport.left,-viewport.top)
+        }
+    }
+    private fun tunnelHeading(nest:Nest,a:Int,b:Int,t:Double,w:Float,h:Float):Float {
+        val start=NestGrowth.visiblePoint(nest,a,b,(t-.01).coerceAtLeast(0.0))
+        val end=NestGrowth.visiblePoint(nest,a,b,(t+.01).coerceAtMost(1.0))
+        return Math.toDegrees(atan2((end.y-start.y)*h,(end.x-start.x)*w)).toFloat()
+    }
     private fun drawNestMaterial(c: Canvas,nest: Nest,w: Float,h: Float) {
         val worldHeight=(h*nest.depth).toFloat()
-        val key="${width}:${height}:${(worldHeight/8).toInt()}:"+nest.chambers.joinToString { "${it.id}:${it.x}:${it.y}:${it.radius}:${(it.built*20).toInt()}" }+nest.tunnels.toString()
+        val key="${width}:${height}:$viewport:${camera.scale}:"+nest.chambers.joinToString { "${it.id}:${it.x}:${it.y}:${(it.radius*1000).toInt()}:${(it.built*20).toInt()}" }+nest.tunnels.toString()
         if(key!=textureKey || nestTexture==null) {
             textureKey=key
-            val resolution=min(1.0,sqrt(4_000_000.0/(width*worldHeight))).toFloat()
-            val layer=Bitmap.createBitmap((width*resolution).toInt().coerceAtLeast(1),(worldHeight*resolution).toInt().coerceAtLeast(1),Bitmap.Config.ARGB_8888)
-            val target=Canvas(layer);target.scale(resolution,resolution)
-            val voids=Path()
+            val (layer,target)=layer(4_000_000.0)
+            val parts=Path()
             val rimPoints=mutableListOf<Point>()
             // Unite all passages and rooms: connected rooms have open mouths, never circular walls across doors.
             nest.tunnels.forEach { edge ->
                 val a=nest.room(edge.a);val b=nest.room(edge.b)
                 val start=NestGrowth.point(nest,a.id);val end=NestGrowth.point(nest,b.id)
+                val bounds=RectF((min(start.x,end.x)*w-w*.08).toFloat(),(min(start.y,end.y)*h-w*.08).toFloat(),(max(start.x,end.x)*w+w*.08).toFloat(),(max(start.y,end.y)*h+w*.08).toFloat())
+                if(!RectF.intersects(bounds,viewport))return@forEach
                 val dx=(end.x-start.x)*w;val dy=(end.y-start.y)*h
                 val length=hypot(dx,dy).coerceAtLeast(1.0)
                 val nx=-dy/length;val ny=dx/length
                 val path=Path()
-                val samples=max(12,(length/5).toInt())
-                for(side in listOf(1,-1)) {
-                    val indices=if(side==1)0..samples else samples downTo 0
+                val samples=(length*camera.scale/5).toInt().coerceIn(12,96)
+                for(side in listOf(-1,1)) {
+                    val indices=if(side==-1)0..samples else samples downTo 0
                     for(i in indices) {
                         val t=i.toDouble()/samples
-                        val width=w*(.021+sin(t*34+edge.b)*.0015+cos(t*61+edge.a)*.0011)
-                        val x=start.x*w+dx*t+nx*width*side
-                        val y=start.y*h+dy*t+ny*width*side
-                        if(side==1 && i==0)path.moveTo(x.toFloat(),y.toFloat())else path.lineTo(x.toFloat(),y.toFloat())
+                        val width=w*(.0115+NestGrowth.variation(edge.b,67)*.004+sin(t*34+edge.b)*.0008+cos(t*61+edge.a)*.0006)
+                        val center=NestGrowth.visiblePoint(nest,edge.a,edge.b,t)
+                        val x=center.x*w+nx*width*side
+                        val y=center.y*h+ny*width*side
+                        if(side==-1 && i==0)path.moveTo(x.toFloat(),y.toFloat())else path.lineTo(x.toFloat(),y.toFloat())
                         rimPoints+=Point(x,y)
                     }
                 }
-                path.close();voids.op(path,Path.Op.UNION)
+                path.close();parts.addPath(path)
             }
-            nest.chambers.filter {it.id!=0 && NestGrowth.chamberProgress(it)>0}.forEach { room ->
-                val rx=room.radius*w*sqrt(NestGrowth.chamberProgress(room));val ry=rx*.70
+            nest.chambers.filter {it.id!=0 && NestGrowth.chamberProgress(it)>0 && visible(it,w,h)}.forEach { room ->
+                val progress=sqrt(NestGrowth.chamberProgress(room))
                 val path=Path()
                 for(i in 0..96) {
                     val a=i*2*PI/96
-                    val rough=1+sin(a*5+room.id)*.045+cos(a*11+room.id*2)*.025+sin(a*23)*.012
-                    val x=room.x*w+cos(a)*rx*rough;val y=room.y*h+sin(a)*ry*rough
+                    val offset=NestGrowth.outline(room,a)
+                    val x=room.x*w+offset.x*w*progress;val y=room.y*h+offset.y*w*progress
                     if(i==0)path.moveTo(x.toFloat(),y.toFloat())else path.lineTo(x.toFloat(),y.toFloat())
                     rimPoints+=Point(x,y)
                 }
-                path.close();voids.op(path,Path.Op.UNION)
+                path.close();parts.addPath(path)
             }
+            // Simplify all equally wound contours once. Repeated union of a growing whole nest
+            // makes large colonies quadratic and can stall the UI for seconds.
+            val voids=Path().apply {op(parts,Path(),Path.Op.UNION)}
             paint.reset();paint.isAntiAlias=true;paint.style=Paint.Style.STROKE
             paint.color=0xd31b120c.toInt();paint.strokeWidth=w*.041f
             paint.maskFilter=BlurMaskFilter(w*.012f,BlurMaskFilter.Blur.NORMAL);target.drawPath(voids,paint)
@@ -296,9 +322,13 @@ class NestView(context: Context) : View(context) {
             paint.style=Paint.Style.FILL;paint.color=0xff36281a.toInt();target.drawPath(voids,paint)
             target.save();target.clipPath(voids)
             paint.colorFilter=ColorMatrixColorFilter(floatArrayOf(.38f,0f,0f,0f,0f, 0f,.36f,0f,0f,0f, 0f,0f,.32f,0f,0f, 0f,0f,0f,1f,0f))
-            target.drawBitmap(bitmap,null,RectF(0f,0f,w,h),paint);drawDeepSoil(target,w,h,worldHeight);paint.colorFilter=null
+            for(column in floor(viewport.left/w).toInt()..floor(viewport.right/w).toInt()) {
+                target.save();target.translate(column*w,0f)
+                target.drawBitmap(bitmap,null,RectF(0f,0f,w,h),paint);drawDeepSoil(target,w,h,worldHeight);target.restore()
+            }
+            paint.colorFilter=null
             paint.shader=LinearGradient(0f,h*.2f,0f,h,intArrayOf(0x40232318,0x7a090e0a),null,Shader.TileMode.CLAMP)
-            target.drawRect(0f,0f,w,worldHeight,paint);paint.shader=null
+            target.drawRect(viewport,paint);paint.shader=null
             paint.style=Paint.Style.STROKE;paint.strokeWidth=w*.029f;paint.color=0xec060805.toInt()
             paint.maskFilter=BlurMaskFilter(w*.012f,BlurMaskFilter.Blur.NORMAL);target.drawPath(voids,paint)
             paint.strokeWidth=w*.008f;paint.maskFilter=null;paint.color=0x696e5232
@@ -316,13 +346,13 @@ class NestView(context: Context) : View(context) {
             nestTexture=layer
         }
         paint.reset();paint.isAntiAlias=true;paint.isFilterBitmap=true
-        nestTexture?.let {c.drawBitmap(it,null,RectF(0f,0f,w,worldHeight),paint)}
+        nestTexture?.let {c.drawBitmap(it,null,viewport,paint)}
     }
     private fun drawDebris(c: Canvas,nest: Nest,w: Float,h: Float) {
-        nest.chambers.filter { it.id!=0 && it.built>=1 }.forEach { r ->
+        nest.chambers.filter { it.id!=0 && it.built>=1 && visible(it,w,h) }.forEach { r ->
             repeat(24) { i ->
                 val angle=i*2.399+r.id;val radius=sqrt((i+.5)/24)*r.radius
-                val x=(r.x+cos(angle)*radius*.95)*w;val y=r.y*h+sin(angle)*radius*w*.67
+                val x=(r.x+cos(angle)*radius*.95)*w;val y=r.y*h+sin(angle)*radius*w*.37
                 paint.color=if(i%3==0)0x775e4d36 else 0x666a543c
                 c.drawCircle(x.toFloat(),y.toFloat(),w*(.0007f+(i%4)*.0004f),paint)
             }
@@ -330,9 +360,9 @@ class NestView(context: Context) : View(context) {
     }
     private fun drawDeepSoil(c:Canvas,w:Float,h:Float,depth:Float) {
         val source=Rect(0,(bitmap.height*.35).toInt(),bitmap.width,bitmap.height)
-        var top=h
-        var tile=0
-        while(top<depth) {
+        var tile=max(0,floor((viewport.top-h)/(h*.65f)).toInt())
+        var top=h+tile*h*.65f
+        while(top<min(depth,viewport.bottom)) {
             // Mirrored edges join the same soil pixels, avoiding a seam at the old view boundary.
             c.save();c.translate(0f,top)
             if(tile%2==0){c.translate(0f,h*.65f);c.scale(1f,-1f)}
@@ -344,22 +374,20 @@ class NestView(context: Context) : View(context) {
         val nurseries=state.nest.chambers.count {it.built>=1 && state.nest.roomName(it)=="育児室"}.coerceAtLeast(1)
         val stores=state.nest.chambers.count {it.built>=1 && state.nest.roomName(it)=="貯蔵室"}.coerceAtLeast(1)
         val counts=BroodStage.entries.flatMap {stage->List(nurseries) {i->min(18,state.count(stage)/nurseries+if(i<state.count(stage)%nurseries)1 else 0)}}
-        val worldHeight=(h*state.nest.depth).toFloat()
-        val key="${width}:${height}:${(worldHeight/8).toInt()}:$counts:${min(22,(state.food/18/stores).toInt())}:"+state.nest.chambers.joinToString {"${it.id}:${it.built>=1}"}
+        val key="${width}:${height}:$viewport:${camera.scale}:$counts:${min(22,(state.food/18/stores).toInt())}:"+state.nest.chambers.joinToString {"${it.id}:${it.built>=1}"}
         if(key!=contentsKey || contentsTexture==null) {
             contentsKey=key
-            val resolution=min(1.0,sqrt(2_000_000.0/(width*worldHeight))).toFloat()
-            val layer=Bitmap.createBitmap((width*resolution).toInt().coerceAtLeast(1),(worldHeight*resolution).toInt().coerceAtLeast(1),Bitmap.Config.ARGB_8888)
-            val target=Canvas(layer);target.scale(resolution,resolution)
+            val (layer,target)=layer(2_000_000.0)
             drawBroodContents(target,state,w,h)
             contentsTexture=layer
         }
         paint.reset();paint.isAntiAlias=true;paint.isFilterBitmap=true
-        contentsTexture?.let {c.drawBitmap(it,null,RectF(0f,0f,w,worldHeight),paint)}
+        contentsTexture?.let {c.drawBitmap(it,null,viewport,paint)}
     }
     private fun drawBroodContents(c: Canvas,state: Colony,w: Float,h: Float) {
         val nurseries=state.nest.chambers.filter {it.built>=1 && state.nest.roomName(it)=="育児室"}.ifEmpty {listOf(state.nest.room(state.nest.queenRoom))}
         nurseries.forEachIndexed {roomIndex,nursery->
+            if(!visible(nursery,w,h))return@forEachIndexed
             BroodStage.entries.forEachIndexed { stageIndex,stage ->
                 val count=state.count(stage)/nurseries.size + if(roomIndex<state.count(stage)%nurseries.size)1 else 0
                 repeat(min(count,18)) { i ->
@@ -373,6 +401,7 @@ class NestView(context: Context) : View(context) {
         }
         val stores=state.nest.chambers.filter {it.built>=1 && state.nest.roomName(it)=="貯蔵室"}.ifEmpty {nurseries}
         stores.forEach {store->
+            if(!visible(store,w,h))return@forEach
             repeat(min(22,(state.food/18/stores.size).toInt())){i ->
                 val x=(store.x*w+sin(i*5.77)*w*.033).toFloat();val y=(store.y*h+cos(i*4.13)*w*.014).toFloat()
                 oval(c,x-w*.002f,y-w*.001f,x+w*.003f,y+w*.002f,if(i%3==0)0xff8b5e36.toInt()else 0xff89915a.toInt())
@@ -382,7 +411,7 @@ class NestView(context: Context) : View(context) {
     private fun drawEnemy(c:Canvas,nest:Nest,enemy:Invader,x:Float,y:Float,w:Float,h:Float) {
         val index=enemy.segment.coerceAtMost(enemy.route.lastIndex-1)
         val from=nest.room(enemy.route[index]).point;val to=nest.room(enemy.route[index+1]).point
-        val heading=Math.toDegrees(atan2((to.y-from.y)*h,(to.x-from.x)*w)).toFloat()
+        val heading=tunnelHeading(nest,enemy.route[index],enemy.route[index+1],enemy.progress,w,h)
         val traveled=enemy.route.take(index+1).zipWithNext().sumOf {(a,b)->
             val p=nest.room(a).point;val q=nest.room(b).point;hypot(q.x-p.x,(q.y-p.y)*h/w)
         }+hypot(to.x-from.x,(to.y-from.y)*h/w)*enemy.progress

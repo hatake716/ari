@@ -14,10 +14,11 @@ object StateCodec {
         "starvationCredit" to c.starvationCredit, "nextRaid" to c.nextRaid, "raids" to c.raidCount,
         "repelled" to c.repelled, "losses" to c.losses, "royalLaid" to c.royalLaid,
         "youngQueens" to c.youngQueens, "males" to c.males, "royalAdultDay" to c.royalAdultDay,
-        "flight" to c.flightProgress, "saved" to c.lastSavedMillis, "speed" to c.speed,
+        "flight" to c.flightProgress, "completedFlights" to c.completedFlights, "nextRoyalDay" to c.nextRoyalDay,
+        "queenLifespanDays" to c.queenLifespanDays, "queenDiedOfAge" to c.queenDiedOfAge, "saved" to c.lastSavedMillis, "speed" to c.speed,
         "nest" to json("shape" to c.nest.shape,"size" to c.nest.size,"queen" to c.nest.queenRoom,
             "rooms" to array(c.nest.chambers.map { json("id" to it.id,"x" to it.x,"y" to it.y,"r" to it.radius,"built" to it.built) }),
-            "tunnels" to array(c.nest.tunnels.map { json("a" to it.a,"b" to it.b) }),
+            "tunnels" to array(c.nest.tunnels.map { json("a" to it.a,"b" to it.b,"bend" to it.bend) }),
             "obstacles" to array(c.nest.obstacles.map { json("a" to it.a,"b" to it.b,"t" to it.t,"kind" to it.kind.name) })),
         "brood" to array(c.brood.map { json("count" to it.count,"age" to it.age,"royal" to it.royal) }),
         "adults" to array(c.adults.map { json("count" to it.count,"age" to it.age) }),
@@ -27,20 +28,19 @@ object StateCodec {
     ).toString()
     private fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
     fun decode(text: String): Colony {
-        require(text.length < 2_000_000) { "Save too large" }
         val o = JSONObject(text)
         require(o.getInt("version") == 1) { "Unsupported save version" }
         val n = o.getJSONObject("nest")
         val nest = Nest(
             n.getJSONArray("rooms").objects().map { Chamber(it.getInt("id"),it.getDouble("x"),it.getDouble("y"),it.getDouble("r"),it.getDouble("built")) }.toMutableList(),
-            n.getJSONArray("tunnels").objects().map { Tunnel(it.getInt("a"),it.getInt("b")) }.toMutableList(),
+            n.getJSONArray("tunnels").objects().map { Tunnel(it.getInt("a"),it.getInt("b"),it.optDouble("bend",0.0)) }.toMutableList(),
             n.getJSONArray("obstacles").objects().map { Obstacle(it.getInt("a"),it.getInt("b"),it.getDouble("t"),ObstacleKind.valueOf(it.getString("kind"))) }.toMutableList(),
             n.getInt("queen"),n.getInt("shape"),n.getInt("size"))
-        require(nest.chambers.size in 2..(NestGrowth.MAX_ROOMS+1))
-        val ids = nest.chambers.map { it.id }
-        require(ids.distinct().size == ids.size && 0 in ids && nest.queenRoom in ids && nest.queenRoom != 0)
-        require(nest.chambers.all { it.x in 0.0..1.0 && it.y in 0.0..NestGrowth.MAX_DEPTH && it.radius in .005.. .15 && it.built in 0.0..1.0 })
-        require(nest.tunnels.all { it.a in ids && it.b in ids && it.a != it.b })
+        require(nest.chambers.size >= 2)
+        val ids = nest.chambers.map { it.id }.toSet()
+        require(ids.size == nest.chambers.size && 0 in ids && nest.queenRoom in ids && nest.queenRoom != 0)
+        require(nest.chambers.all { it.id >= 0 && it.x.isFinite() && it.y.isFinite() && it.y >= 0.0 && it.radius in .005.. .15 && it.built in 0.0..1.0 })
+        require(nest.tunnels.all { it.a in ids && it.b in ids && it.a != it.b && it.bend.isFinite() && kotlin.math.abs(it.bend)<=.1 })
         require(nest.obstacles.size <= 8 && nest.obstacles.all { b -> b.t in 0.0..1.0 && nest.tunnels.any { (it.a == b.a && it.b == b.b) || (it.a == b.b && it.b == b.a) } })
         require(nest.path(0,nest.queenRoom).isNotEmpty())
         return Colony(nest,o.getLong("rng")).also { c ->
@@ -50,6 +50,15 @@ object StateCodec {
             c.nextRaid=o.getDouble("nextRaid"); c.raidCount=o.getInt("raids"); c.repelled=o.getInt("repelled"); c.losses=o.getInt("losses")
             c.royalLaid=o.getBoolean("royalLaid"); c.youngQueens=o.getInt("youngQueens"); c.males=o.getInt("males")
             c.royalAdultDay=o.getDouble("royalAdultDay"); c.flightProgress=o.getDouble("flight"); c.lastSavedMillis=o.getLong("saved"); c.speed=o.getInt("speed")
+            // Old cleared saves represent their first flight. Give existing queens the full
+            // 20-year observation window; loading must not reroll a queen's lifespan.
+            c.completedFlights=o.optInt("completedFlights",if(c.phase==Phase.CLEARED)1 else 0)
+            c.nextRoyalDay=o.optDouble("nextRoyalDay",if(c.phase==Phase.CLEARED)c.day+365.0 else 0.0)
+            c.queenLifespanDays=o.optDouble("queenLifespanDays",7300.0)
+            c.queenDiedOfAge=o.optBoolean("queenDiedOfAge",false)
+            require(c.completedFlights>=0 && c.nextRoyalDay.isFinite() && c.nextRoyalDay>=0)
+            require(c.queenLifespanDays in 3650.0..7300.0)
+            require(!c.queenDiedOfAge || (c.phase==Phase.LOST && c.queenHealth==0.0))
             c.brood.addAll(o.getJSONArray("brood").objects().map { Brood(it.getInt("count"),it.getDouble("age"),it.getBoolean("royal")) })
             c.adults.addAll(o.getJSONArray("adults").objects().map { WorkerCohort(it.getInt("count"),it.getDouble("age")) })
             c.journal.clear(); c.journal.addAll(o.getJSONArray("journal").objects().map { Entry(it.getDouble("day"),it.getString("text")) })

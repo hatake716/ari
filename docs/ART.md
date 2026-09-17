@@ -38,3 +38,14 @@ The **exact prompt set**, source output filenames and month-to-asset mapping are
 `EnemyRenderer.kt` contains three authored procedural dorsal models, not copied insect photographs or downloaded meshes. It draws exposed abdominal plates and abbreviated elytra for rove beetles, paired terminal forceps for earwigs, and striated elytra for ground beetles. Anatomy references and limits are listed in BIOLOGY.md. All three use articulated legs and segmented filiform antennae; motion follows simulated displacement.
 
 The nest remains dynamic geometry. Additional depth reuses alternating mirrored strips of the existing soil image so adjacent edges meet. No new external bitmap assets were introduced. The full nest texture cache is bounded to four million pixels, and the brood/food layer to two million pixels. Static contents and soil crumbs are cached. Pausing stops redundant redraws. Natural growth comparison panels and model plates are rendered by Android instrumentation using the actual game code, not concept illustrations.
+
+
+## Unbounded natural nest geometry (1.3.0)
+
+The natural architecture references are the CC BY 4.0 models documented in [NEST_SOURCES.md](NEST_SOURCES.md). These include an actual downloadable Promob reconstruction archive, inspected as reference. No source model, paper figure or thumbnail is bundled with the app.
+
+The authored cross section uses branching descending shafts with gentle curvature and variable spacing, and horizontally elongated chambers with lobed, asymmetric outlines. Passage centerlines are shared with agent and invader motion. The former 48-room and depth-3.2 limits are removed from both growth and save loading. Existing rooms can widen when the colony needs space, without moving the queen or placed barriers.
+
+The 1.2.0 whole-world bitmap cache is replaced by a viewport cache: at most four million pixels for soil cavities and two million for brood/food, with neither bitmap exceeding the screen dimensions. Offscreen geometry is culled. A single path union opens connected passage mouths without repeatedly rebuilding the union for every chamber. Zoom range grows with the nest bounds so detailed observation stays possible even in a deep colony. The overview may show tiny rooms; pinching reveals full detail.
+
+The new [growth comparison](screenshots/natural-nest-growth.png) uses the same seed and natural simulated colony at days 100, 400, and 600; the [160-room view](screenshots/unbounded-nest-ui.png) is a synthetic stress fixture. Both are outputs of the actual Android renderer.

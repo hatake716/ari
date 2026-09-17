@@ -12,7 +12,7 @@ data class Point(val x: Double, val y: Double) {
 data class Chamber(val id: Int, var x: Double, var y: Double, var radius: Double = .066, var built: Double = 1.0) {
     val point get() = Point(x, y)
 }
-data class Tunnel(val a: Int, val b: Int)
+data class Tunnel(val a: Int, val b: Int, val bend: Double = 0.0)
 enum class ObstacleKind(val label: String, val workerSpeed: Double, val enemySpeed: Double) {
     TWIG("小枝", .64, .30), STONE("小石", .44, .18)
 }
@@ -26,9 +26,25 @@ class Nest(
     var shape: Int = 0,
     var size: Int = 1,
 ) {
-    fun room(id: Int) = chambers.first { it.id == id }
+    private var indexedSize=-1
+    private var roomIndex=emptyMap<Int,Chamber>()
+    fun room(id: Int):Chamber {
+        if(indexedSize!=chambers.size){roomIndex=chambers.associateBy {it.id};indexedSize=chambers.size}
+        return roomIndex[id] ?: chambers.first {it.id==id}.also {indexedSize=-1}
+    }
     val capacity get() = chambers.filter { it.id != 0 }.sumOf { it.radius * it.radius * 17000 * NestGrowth.chamberProgress(it) }.toInt().coerceAtLeast(1)
     fun blocks(a: Int, b: Int) = obstacles.filter { (it.a == a && it.b == b) || (it.a == b && it.b == a) }
+    private var indexedEdges=-1
+    private var edgeIndex=emptyMap<Long,Tunnel>()
+    private fun edgeKey(a:Int,b:Int)=(min(a,b).toLong() shl 32) or max(a,b).toLong()
+    private fun edge(a:Int,b:Int):Tunnel? {
+        if(indexedEdges!=tunnels.size){edgeIndex=tunnels.associateBy {edgeKey(it.a,it.b)};indexedEdges=tunnels.size}
+        return edgeIndex[edgeKey(a,b)]
+    }
+    fun tunnelPoint(a:Int,b:Int,t:Double):Point {
+        val edge=edge(a,b)
+        return curve(room(a).point,room(b).point,t,if(edge?.a==a)edge.bend else -(edge?.bend ?: 0.0))
+    }
     fun localSpeed(a: Int, b: Int, t: Double, enemy: Boolean): Double {
         var speed = 1.0
         blocks(a, b).forEach {
@@ -37,50 +53,84 @@ class Nest(
         }
         return speed.coerceAtLeast(.06)
     }
-    fun cost(a: Int, b: Int, enemy: Boolean): Double {
-        val length = room(a).point.distance(room(b).point)
-        // Integrate the same local speed function that visible agents use.
-        return (0 until 40).sumOf { length / 40 / localSpeed(a, b, (it + .5) / 40, enemy) }
+    fun tunnelLength(a:Int,b:Int):Double {
+        val edge=edge(a,b)
+        val from=room(a).point;val to=room(b).point
+        if(edge==null || edge.bend==0.0)return from.distance(to)
+        return (0 until 16).sumOf {tunnelPoint(a,b,it/16.0).distance(tunnelPoint(a,b,(it+1)/16.0))}
     }
-    fun path(start: Int, end: Int, enemy: Boolean = false): List<Int> {
-        if (start == end) return listOf(start)
-        val distance = chambers.associate { it.id to Double.POSITIVE_INFINITY }.toMutableMap()
-        val previous = mutableMapOf<Int, Int>()
-        val open = chambers.filter { it.built >= 1 || it.id == end || it.id == start }.map { it.id }.toMutableSet()
-        distance[start] = 0.0
-        while (open.isNotEmpty()) {
-            val current = open.minBy { distance[it] ?: Double.POSITIVE_INFINITY }
-            if (current == end) break
-            open.remove(current)
-            tunnels.filter { it.a == current || it.b == current }.forEach { edge ->
-                val next = if (edge.a == current) edge.b else edge.a
-                if (next in open) {
-                    val proposed = distance.getValue(current) + cost(current, next, enemy)
-                    if (proposed < distance.getValue(next)) { distance[next] = proposed; previous[next] = current }
+    fun cost(a: Int, b: Int, enemy: Boolean): Double {
+        val edge=edge(a,b)
+        val bend=if(edge?.a==a)edge.bend else -(edge?.bend ?: 0.0)
+        val from=room(a).point;val to=room(b).point
+        if(bend==0.0 && blocks(a,b).isEmpty())return from.distance(to)
+        return (0 until 40).sumOf {i->
+            curve(from,to,(i+1)/40.0,bend).distance(curve(from,to,i/40.0,bend))/localSpeed(a,b,(i+.5)/40,enemy)
+        }
+    }
+    private data class RouteNode(val id:Int,val cost:Double)
+    private data class Routes(val previous:Map<Int,Int>,val cost:Map<Int,Double>,val length:Map<Int,Double>)
+    private var routeStamp:Int?=null
+    private var adjacency=emptyMap<Int,List<Pair<Int,DoubleArray>>>()
+    private val routeCache=linkedMapOf<Triple<Int,Int,Boolean>,List<Int>>()
+    private var efficiencyValue:Double?=null
+    private fun prepareRoutes() {
+        var stamp=tunnels.hashCode()*31+obstacles.hashCode()
+        chambers.forEach {stamp=31*stamp+it.id;stamp=31*stamp+it.x.hashCode();stamp=31*stamp+it.y.hashCode();stamp=31*stamp+(it.built>=1).hashCode()}
+        if(stamp==routeStamp)return
+        routeStamp=stamp;routeCache.clear();efficiencyValue=null
+        val links=mutableMapOf<Int,MutableList<Pair<Int,DoubleArray>>>()
+        tunnels.forEach {edge->
+            val a=room(edge.a).point;val b=room(edge.b).point
+            val length=(0 until 40).sumOf {curve(a,b,(it+1)/40.0,edge.bend).distance(curve(a,b,it/40.0,edge.bend))}
+            val costs=doubleArrayOf(cost(edge.a,edge.b,false),cost(edge.a,edge.b,true),length)
+            links.getOrPut(edge.a){mutableListOf()}+=edge.b to costs
+            links.getOrPut(edge.b){mutableListOf()}+=edge.a to costs
+        }
+        adjacency=links
+    }
+    private fun routes(start:Int,end:Int?,enemy:Boolean):Routes {
+        val distance=mutableMapOf(start to 0.0);val length=mutableMapOf(start to 0.0);val previous=mutableMapOf<Int,Int>()
+        val queue=java.util.PriorityQueue<RouteNode>(compareBy {it.cost});queue+=RouteNode(start,0.0)
+        while(queue.isNotEmpty()) {
+            val current=queue.remove()
+            if(current.cost!=distance[current.id])continue
+            if(current.id==end)break
+            adjacency[current.id].orEmpty().forEach {(next,costs)->
+                if(room(next).built<1 && next!=end)return@forEach
+                val proposed=current.cost+costs[if(enemy)1 else 0]
+                if(proposed<(distance[next] ?: Double.POSITIVE_INFINITY)) {
+                    distance[next]=proposed;length[next]=length.getValue(current.id)+costs[2]
+                    previous[next]=current.id;queue+=RouteNode(next,proposed)
                 }
             }
         }
-        if (end !in previous) return emptyList()
-        val result = mutableListOf(end)
-        while (result.last() != start) result += previous[result.last()] ?: return emptyList()
-        return result.reversed()
+        return Routes(previous,distance,length)
+    }
+    fun path(start: Int, end: Int, enemy: Boolean = false): List<Int> {
+        if(start==end)return listOf(start)
+        prepareRoutes()
+        val key=Triple(start,end,enemy)
+        routeCache[key]?.let {return it}
+        val paths=routes(start,end,enemy)
+        if(end !in paths.previous)return emptyList()
+        val result=mutableListOf(end)
+        while(result.last()!=start)result+=paths.previous[result.last()] ?: return emptyList()
+        val route=result.reversed()
+        if(routeCache.size>=512)routeCache.remove(routeCache.keys.first())
+        routeCache[key]=route
+        return route
     }
     fun travelCost(route: List<Int>, enemy: Boolean = false) = route.zipWithNext().sumOf { (a, b) -> cost(a, b, enemy) }
-    private var efficiencyKey = ""
-    private var efficiencyValue = 1.0
     val efficiency: Double get() {
-        val key=chambers.joinToString { "${it.id}:${it.x}:${it.y}:${it.built>=1}" }+tunnels+obstacles
-        if(key==efficiencyKey)return efficiencyValue
-        efficiencyKey=key
-        // Only barriers on real transport routes affect productivity; a side-branch stone is not a global debuff.
-        val inhabited = chambers.filter { it.id != 0 && it.built >= 1 }
-        val ratios = inhabited.map { room ->
-            val route = path(0, room.id)
-            val direct = route.zipWithNext().sumOf { (a, b) -> this.room(a).point.distance(this.room(b).point) }
-            if (direct == 0.0) .1 else direct / travelCost(route).coerceAtLeast(.001)
+        prepareRoutes()
+        efficiencyValue?.let {return it}
+        // One shortest-path traversal for all inhabited chambers, rather than one per destination.
+        val routes=routes(0,null,false)
+        val ratios=chambers.filter {it.id!=0 && it.built>=1}.map {
+            (routes.length[it.id] ?: 0.0)/(routes.cost[it.id] ?: .001).coerceAtLeast(.001)
         }
-        efficiencyValue=ratios.average().takeIf { it.isFinite() }?.coerceIn(.1, 1.0) ?: .1
-        return efficiencyValue
+        return (ratios.average().takeIf {it.isFinite()}?.coerceIn(.1,1.0) ?: .1).also {efficiencyValue=it}
     }
     fun addRoom(point: Point): Boolean {
         if (chambers.size >= 20 || point.y !in .26.. .89 || point.x !in .10.. .90) return false
@@ -120,6 +170,11 @@ class Nest(
         return false
     }
     companion object {
+        fun curve(a:Point,b:Point,t:Double,bend:Double):Point {
+            val p=a.mix(b,t);val length=a.distance(b).coerceAtLeast(1e-12)
+            val offset=4*t*(1-t)*bend
+            return Point(p.x-(b.y-a.y)/length*offset,p.y+(b.x-a.x)/length*offset)
+        }
         val SHAPES = listOf("樹形", "縦穴", "広間")
         val SIZES = listOf("小さめ", "ふつう", "大きめ")
         fun create(shape: Int = 0, size: Int = 1): Nest {
@@ -167,6 +222,11 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
     var males = 0
     var royalAdultDay = -1.0
     var flightProgress = 0.0
+    var completedFlights = 0
+    var nextRoyalDay = 0.0
+    // User-requested 10–20 year range; a deterministic game parameter, not a survival curve.
+    var queenLifespanDays = 3650.0 + Math.floorMod(rngState,3651L)
+    var queenDiedOfAge = false
     var invader: Invader? = null
     var lastSavedMillis = System.currentTimeMillis()
     var speed = 3600
@@ -183,6 +243,17 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
     val foragers get() = if (invader == null) (workers * .32).toInt() else (workers * .12).toInt()
     val builders get() = if (invader == null) (workers * .18).toInt() else (workers * .05).toInt()
     val guards get() = (workers * if (invader == null) .14 else .65).toInt()
+    /** Resume the mother colony only after a successful departure, without resetting its nest or clock. */
+    fun continueObservation():Boolean {
+        if(phase!=Phase.CLEARED || queenHealth<=0 || queenDiedOfAge)return false
+        completedFlights=completedFlights.coerceAtLeast(1)
+        youngQueens=0;males=0;royalLaid=false;royalAdultDay=-1.0;flightProgress=0.0
+        nextRoyalDay=max(nextRoyalDay,day+30.0)
+        phase=Phase.GROWING;remainder=0.0
+        if(speed==0)speed=1
+        record("第${completedFlights}回の旅立ちを見送り、母女王と現在の巣の観察を続けます。")
+        return true
+    }
     fun count(stage: BroodStage) = brood.filter { it.stage == stage }.sumOf { it.count }
     fun random(): Double {
         var x = if (rngState == 0L) 1L else rngState
@@ -214,6 +285,11 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
     }
     private fun tick(dt: Double) {
         day += dt
+        if(day>=queenLifespanDays) {
+            queenHealth=0.0;queenDiedOfAge=true;phase=Phase.LOST
+            record("女王が寿命を迎えました。創設から${(day/365).toInt()}年、子女王の旅立ちを${completedFlights}回見届けた巣の記録が残ります。")
+            return
+        }
         if (phase == Phase.ARRIVAL && day >= .25) {
             phase = Phase.FOUNDING
             record("女王が奥の部屋へ。蓄えた栄養で、最初の子を育てます。")
@@ -264,8 +340,10 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
             if (starvationCredit >= 1) { removeWorkers(starvationCredit.toInt()); starvationCredit %= 1 }
         } else queenHealth = (queenHealth + dt * .08).coerceAtMost(100.0)
         expand(dt)
-        if (!royalLaid && workers >= 80 && food > 25 && (day >= REPRODUCTIVE_AGE || (population > nest.capacity * 1.55 && day >= 365))) {
-            royalLaid = true; phase = Phase.REPRODUCTIVE
+        val readyForRoyals=if(completedFlights==0) day >= REPRODUCTIVE_AGE || (population > nest.capacity * 1.55 && day >= 365)
+            else day>=nextRoyalDay && !winter
+        if (!royalLaid && workers >= 80 && food > 25 && readyForRoyals) {
+            royalLaid = true; phase = Phase.REPRODUCTIVE; nextRoyalDay=day+365.0
             brood += Brood((workers / 100).coerceIn(2,12), royal=true)
             record("群れが成熟し、子女王の育成が始まりました。次の世代を育てます。")
         }
@@ -275,7 +353,7 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
         }
         if (phase == Phase.FLIGHT) {
             flightProgress += dt / .30
-            if (flightProgress >= 1) { flightProgress=1.0; phase=Phase.CLEARED; record("子女王が空へ旅立ちました。母の巣から、新しい群れへ命がつながります。") }
+            if (flightProgress >= 1) { flightProgress=1.0; phase=Phase.CLEARED; completedFlights++; record("子女王が空へ旅立ちました。母の巣から、新しい群れへ命がつながります。") }
         }
         if (!terminal && phase != Phase.FLIGHT && invader == null && day >= nextRaid && !winter) spawnRaid()
         if (invader != null && !terminal) combat(dt)
@@ -299,6 +377,7 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
             room.built=(room.built+dt*min(.12,labor*.0075/jobs.size)).coerceAtMost(1.0)
             if(room.built>=1)record("${nest.roomName(room)}が完成。巣は${nest.completedRooms}室になりました。新しい空間へ群れが広がります。")
         }
+        NestGrowth.enlarge(nest,dt*labor,population,(day/STEP).toLong())
         val target=NestGrowth.demand(workers,population)
         val parallel=when {workers>=1200->3;workers>=400->2;else->1}
         if(nest.chambers.size-1>=target || nest.construction.size>=parallel)return
@@ -338,7 +417,7 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
         var remaining = enemy.kind.speed * dt
         while (remaining > 0 && enemy.segment < enemy.route.lastIndex) {
             val a = enemy.route[enemy.segment]; val b = enemy.route[enemy.segment + 1]
-            val length = nest.room(a).point.distance(nest.room(b).point)
+            val length = nest.tunnelLength(a,b)
             // Small spatial substeps ensure a fast predator cannot skip a twig or stone.
             val distance = min(.004,remaining)
             enemy.progress += distance / length * nest.localSpeed(a,b,enemy.progress,true)
@@ -351,9 +430,8 @@ class Colony(val nest: Nest, var rngState: Long = System.nanoTime()) {
         }
     }
     fun enemyPoint(): Point? = invader?.let {
-        val from = nest.room(it.route[it.segment.coerceAtMost(it.route.lastIndex)]).point
-        val to = nest.room(it.route[(it.segment+1).coerceAtMost(it.route.lastIndex)]).point
-        from.mix(to,it.progress)
+        val index=it.segment.coerceAtMost(it.route.lastIndex-1)
+        nest.tunnelPoint(it.route[index],it.route[index+1],if(it.segment>=it.route.lastIndex)1.0 else it.progress)
     }
     companion object {
         const val STEP = 1.0 / 48

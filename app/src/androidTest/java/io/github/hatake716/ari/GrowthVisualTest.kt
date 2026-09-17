@@ -15,7 +15,7 @@ import java.io.File
 class GrowthVisualTest {
     private val instrumentation=InstrumentationRegistry.getInstrumentation()
     private val context=instrumentation.targetContext
-    private val dir get()=File(context.getExternalFilesDir(null),"visual-v1.2").apply {mkdirs()}
+    private val dir get()=File(context.getExternalFilesDir(null),"visual-v1.3").apply {mkdirs()}
     private fun write(bitmap:Bitmap,name:String) {
         File(dir,"$name.png").outputStream().use {assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,it))}
     }
@@ -66,7 +66,34 @@ class GrowthVisualTest {
                 canvas.translate(0f,110f);canvas.clipRect(0f,0f,600f,1150f);view.draw(canvas);canvas.restore()
             }
         }
-        assertEquals(48,state.nest.completedRooms);write(sheet,"colony-growth")
+        assertTrue(state.nest.completedRooms>48);write(sheet,"colony-growth")
+    }
+    @Test fun largeNestUsesScreenSizedCachesAndKeepsDetailWhenZoomed() {
+        val state=Colony(Nest.create(),41).apply {phase=Phase.GROWING;speed=0;adults+=WorkerCohort(5000);food=9000.0}
+        val start=System.nanoTime()
+        repeat(512-4){NestGrowth.plan(state.nest)!!.built=1.0}
+        android.util.Log.i("AriGrowth", "512-room planning ms=${(System.nanoTime()-start)/1_000_000}")
+        val restored=StateCodec.decode(StateCodec.encode(state))
+        assertEquals(512,restored.nest.completedRooms)
+        instrumentation.runOnMainSync {
+            val view=NestView(context).apply {colony=restored;showLabels=false;layout(0,0,900,1500)}
+            val frame=Bitmap.createBitmap(900,1500,Bitmap.Config.ARGB_8888)
+            val canvas=Canvas(frame);view.draw(canvas)
+            android.util.Log.i("AriGrowth", "512-room overview total ms=${(System.nanoTime()-start)/1_000_000}")
+            write(frame,"512-room-overview")
+            val field=NestView::class.java.getDeclaredField("camera").apply {isAccessible=true}
+            val camera=field.get(view) as NestCamera
+            camera.zoom=camera.maxZoom/3
+            val point=restored.nest.chambers.last().point
+            val screen=camera.toScreen(point,900,1500)
+            camera.panX=(450-screen.x).toFloat();camera.panY=(750-screen.y).toFloat();camera.clamp(900,1500)
+            view.draw(canvas);write(frame,"512-room-detail")
+            for(name in listOf("nestTexture","contentsTexture")) {
+                val cache=NestView::class.java.getDeclaredField(name).apply {isAccessible=true}.get(view) as Bitmap
+                assertTrue(cache.width<=900 && cache.height<=1500)
+            }
+            assertTrue(camera.scale>3f)
+        }
     }
     @Test fun expandedNestCanBeInspectedZoomedAndRestoredFromSave() {
         val device=UiDevice.getInstance(instrumentation)
@@ -78,18 +105,18 @@ class GrowthVisualTest {
             phase=Phase.GROWING;day=420.0;speed=0;nextRaid=1e9;food=1700.0;adults+=WorkerCohort(600)
             brood+=Brood(170,12.0);brood+=Brood(130,30.0);brood+=Brood(100,50.0)
         }
-        repeat(28){NestGrowth.plan(state.nest)!!.built=1.0}
+        repeat(156){NestGrowth.plan(state.nest)!!.built=1.0}
         val site=NestGrowth.plan(state.nest)!!.apply {built=.78}
         store.write(0,state)
         val scenario=ActivityScenario.launch(MainActivity::class.java)
         try {
             device.wait(Until.findObject(By.textStartsWith("01     ")),5000)!!.click()
-            assertTrue(device.wait(Until.hasObject(By.textContains("巣 32室")),4000))
+            assertTrue(device.wait(Until.hasObject(By.textContains("巣 160室")),4000))
             assertTrue(device.hasObject(By.textContains("掘削中 78%")))
             assertTrue(device.takeScreenshot(File(dir,"expanded-ui.png")))
             var view=device.findObject(By.descStartsWith("アリの巣の断面図"))
             val bounds=view.visibleBounds
-            val camera=NestCamera().apply {depth=state.nest.depth}
+            val camera=NestCamera().apply {fit(state.nest)}
             val p=camera.toScreen(site.point,bounds.width(),bounds.height())
             device.click(bounds.left+p.x.toInt(),bounds.top+p.y.toInt())
             assertTrue(device.wait(Until.hasObject(By.text("${state.nest.roomName(site)}を掘削中")),3000))
@@ -103,11 +130,11 @@ class GrowthVisualTest {
             device.findObject(By.text("全体")).click()
             assertTrue(device.wait(Until.hasObject(By.descContains("拡大率 1.0倍")),3000))
             device.pressBack();device.wait(Until.findObject(By.textStartsWith("01     ")),4000)!!.click()
-            assertTrue(device.wait(Until.hasObject(By.textContains("巣 32室")),4000))
+            assertTrue(device.wait(Until.hasObject(By.textContains("巣 160室")),4000))
             scenario.recreate()
             assertTrue(device.wait(Until.hasObject(By.textContains("掘削中 78%")),4000))
             val saved=(store.read(0) as Slot.Saved).colony
-            assertEquals(34,saved.nest.chambers.size);assertEquals(.78,saved.nest.room(site.id).built,0.0)
+            assertEquals(162,saved.nest.chambers.size);assertEquals(.78,saved.nest.room(site.id).built,0.0)
         } finally {device.pressHome();scenario.close()}
     }
 }

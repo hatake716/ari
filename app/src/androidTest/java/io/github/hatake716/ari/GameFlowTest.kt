@@ -112,6 +112,7 @@ class GameFlowTest {
         c.invader!!.segment=c.invader!!.route.lastIndex-1;c.invader!!.progress=.94
         store.write(0,c);activity=ActivityScenario.launch(MainActivity::class.java);device.waitForIdle(1500);newSlot(0)
         assertTrue(device.wait(Until.hasObject(By.text("巣の灯が消えました。")),12000))
+        assertFalse(device.hasObject(By.text("現在の女王アリのその後を観察する")))
         screenshot("07-loss")
         click("新たな女王アリを迎える巣を作る")
         assertTrue(device.wait(Until.hasObject(By.text("この巣に、女王を迎える")),3000))
@@ -130,6 +131,7 @@ class GameFlowTest {
         }
         store.write(0,c);activity=ActivityScenario.launch(MainActivity::class.java);device.waitForIdle(1500);newSlot(0)
         assertTrue(device.wait(Until.hasObject(By.text("命は、次の巣へ。")),12000))
+        assertTrue(device.hasObject(By.text("現在の女王アリのその後を観察する")))
         screenshot("08-clear")
         assertFalse(device.hasObject(By.text("観察に戻る")))
         click("新たな女王アリを迎える巣を作る")
@@ -146,6 +148,66 @@ class GameFlowTest {
         assertTrue(device.hasObject(By.textContains("保存データの確認")))
         newSlot(0);assertTrue(device.wait(Until.hasObject(By.text("保存データを保護しました")),4000))
         assertEquals("{broken save",file.readText())
+    }
+
+    @Test fun motherColonyContinuesInSameSlotAndNextDepartureOffersBothChoicesAgain() {
+        val c=Colony(Nest.create(),812).apply {
+            phase=Phase.CLEARED;day=1180.0;youngQueens=4;males=8;royalLaid=true
+            royalAdultDay=1160.0;flightProgress=1.0;completedFlights=1;nextRoyalDay=1460.0
+            speed=0;adults+=WorkerCohort(180);brood+=Brood(20,24.0);food=500.0;nextRaid=1e9
+            nest.obstacles+=Obstacle(0,1,.5,ObstacleKind.STONE)
+        }
+        store.write(0,c)
+        store.write(1,Colony(Nest.create(1),813).apply {speed=0})
+        val other=StateCodec.encode((store.read(1) as Slot.Saved).colony)
+        activity=ActivityScenario.launch(MainActivity::class.java);newSlot(0)
+        assertTrue(device.wait(Until.hasObject(By.text("命は、次の巣へ。")),5000))
+        screenshot("12-ending-two-choices")
+        click("現在の女王アリのその後を観察する")
+        assertTrue(device.wait(Until.hasObject(By.textContains("母女王の観察を継続中")),3000))
+        val resumed=(store.read(0) as Slot.Saved).colony
+        assertEquals(Phase.GROWING,resumed.phase);assertEquals(1,resumed.completedFlights)
+        assertEquals(c.day,resumed.day,0.0);assertEquals(c.workers,resumed.workers)
+        assertEquals(c.brood,resumed.brood);assertEquals(c.nest.chambers,resumed.nest.chambers)
+        assertEquals(c.nest.obstacles,resumed.nest.obstacles);assertEquals(c.nest.queenRoom,resumed.nest.queenRoom)
+        assertEquals(0,resumed.youngQueens);assertEquals(0,resumed.males);assertEquals(1,resumed.speed)
+        device.pressBack();newSlot(0);activity!!.recreate();device.waitForIdle(1200)
+        assertFalse(device.hasObject(By.text("命は、次の巣へ。")))
+        assertTrue(device.hasObject(By.textContains("母女王の観察を継続中")))
+        screenshot("13-mother-observation")
+        // Model tests cover complete natural cycles. Start near the next emergence here
+        // to exercise the actual frame loop, maturation, flight and repeat dialog quickly.
+        activity!!.onActivity { main ->
+            val field=MainActivity::class.java.getDeclaredField("colony").apply {isAccessible=true}
+            (field.get(main) as Colony).apply {
+                phase=Phase.REPRODUCTIVE;royalLaid=true;royalAdultDay=-1.0
+                brood+=Brood(3,79.99,true);speed=604800;nextRoyalDay=day+365
+            }
+        }
+        assertTrue(device.wait(Until.hasObject(By.text("命は、次の巣へ。")),20000))
+        assertTrue(device.hasObject(By.textContains("第2回の旅立ち")))
+        assertTrue(device.hasObject(By.text("新たな女王アリを迎える巣を作る")))
+        assertTrue(device.hasObject(By.text("現在の女王アリのその後を観察する")))
+        screenshot("14-second-departure")
+        assertEquals(2,(store.read(0) as Slot.Saved).colony.completedFlights)
+        click("現在の女王アリのその後を観察する");click("1倍")
+        assertTrue(device.wait(Until.hasObject(By.textContains("旅立ち 2回")),3000))
+        assertEquals(Phase.GROWING,(store.read(0) as Slot.Saved).colony.phase)
+        assertEquals(other,StateCodec.encode((store.read(1) as Slot.Saved).colony))
+    }
+
+    @Test fun agedQueenHasAnEndingWithoutAContinuationChoice() {
+        store.write(0,Colony(Nest.create(),12).apply {
+            phase=Phase.GROWING;queenLifespanDays=3650.0;day=3650.0-Colony.STEP
+            speed=86400;adults+=WorkerCohort(180);nextRaid=1e9;completedFlights=7
+        })
+        activity=ActivityScenario.launch(MainActivity::class.java);newSlot(0)
+        assertTrue(device.wait(Until.hasObject(By.text("女王の一生が終わりました。")),5000))
+        assertFalse(device.hasObject(By.text("現在の女王アリのその後を観察する")))
+        assertTrue((store.read(0) as Slot.Saved).colony.queenDiedOfAge)
+        screenshot("15-queen-lifespan")
+        click("新たな女王アリを迎える巣を作る")
+        assertTrue(device.wait(Until.hasObject(By.text("巣をつくる")),3000))
     }
     @Test fun musicSettingPersistsAndAppReturnsAfterBackgrounding() {
         launch();click("BGM OFF");assertTrue(device.hasObject(By.text("BGM ON")))
